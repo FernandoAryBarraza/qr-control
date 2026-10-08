@@ -1,0 +1,26 @@
+:host {
+    display: flex;
+    align-items: center;
+    gap: 10px
+}
+
+.uav {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--ink);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font: 600 11px 'IBM Plex Mono'
+}
+
+.uname {
+    font: 600 12.5px 'Space Grotesk';
+    line-height: 1.15
+}
+
+.urole {
+    font: 500 9px 'IBM Plex Mono';
+    letter-spacing: .14em;
+    color: var(--soft)
+}

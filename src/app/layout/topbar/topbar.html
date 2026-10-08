@@ -1,0 +1,16 @@
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">P/</div>
+    <div>
+      <div class="brand-name">PASE</div>
+      <div class="brand-sub">CONTROL DE INVITADOS · ACCESOS</div>
+    </div>
+  </div>
+
+  <app-role-switch [options]="roleOptions" [value]="store.role()" (changed)="setRole($event)" />
+
+  <div class="topbar-right">
+    <app-clock />
+    <app-user-chip [user]="store.user()" />
+  </div>
+</header>

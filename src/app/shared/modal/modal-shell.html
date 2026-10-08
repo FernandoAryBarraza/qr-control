@@ -1,0 +1,13 @@
+<div class="overlay" [class.dark]="dark()" (click)="onBackdrop($event)">
+  <div
+    #panel
+    class="modal"
+    [class.wide]="wide()"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-labelledby]="titleId()"
+    tabindex="-1"
+  >
+    <ng-content />
+  </div>
+</div>

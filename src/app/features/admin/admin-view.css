@@ -1,0 +1,6 @@
+/* Admin view specific styles */
+.view-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}

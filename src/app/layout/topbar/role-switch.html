@@ -1,0 +1,15 @@
+<div class="role-switch" role="radiogroup" aria-label="Vista" (keydown)="onKeydown($event)">
+  <span class="role-thumb" aria-hidden="true"></span>
+  @for (option of options(); track option.value) {
+    <button
+      type="button"
+      role="radio"
+      [id]="'role-' + option.value"
+      [attr.aria-checked]="option.value === value()"
+      [attr.tabindex]="option.value === value() ? 0 : -1"
+      (click)="select(option)"
+    >
+      {{ option.label }}
+    </button>
+  }
+</div>

@@ -1,0 +1,24 @@
+<div class="view enter view-admin">
+  <div class="reveal">
+    <app-event-hero />
+  </div>
+  <div class="reveal" style="animation-delay: 0.06s">
+    <app-metrics-section [segments]="store.funnel()" [stats]="store.stats()" />
+  </div>
+  <div class="reveal" style="animation-delay: 0.12s">
+    <app-guest-registry
+      [guests]="store.visibleGuests()"
+      [expandedGuests]="store.expandedGuests()"
+      [guestFilter]="store.guestFilter()"
+      [filterOptions]="filterOptions()"
+      [search]="store.guestQuery()"
+      (searchChanged)="store.setGuestQuery($event)"
+      (filterChanged)="store.setGuestFilter($event)"
+      (toggleGuest)="store.toggleGuest($event)"
+      (sendInvite)="store.sendInvite($event)"
+      (confirm)="store.confirmGuest($event)"
+      (showQr)="handleShowQr($event)"
+      (showQrPass)="handleShowQrPass($event)"
+    />
+  </div>
+</div>

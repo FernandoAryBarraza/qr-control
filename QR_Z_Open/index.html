@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PASE — Control de invitados y accesos</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%231B1611'/%3E%3Ctext x='32' y='45' font-family='Georgia' font-size='36' font-style='italic' fill='%23F3EFE6' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+
+<body>
+  <div class="grain"></div>
+
+  <!-- ============ BARRA SUPERIOR ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">P/</div>
+      <div>
+        <div class="brand-name">PASE</div>
+        <div class="brand-sub">CONTROL DE INVITADOS · ACCESOS</div>
+      </div>
+    </div>
+    <div class="role-switch" id="roleSwitch" data-role="admin">
+      <div class="role-thumb"></div>
+      <button type="button" class="active" data-action="switch-role" data-role="admin">Administrador</button>
+      <button type="button" data-action="switch-role" data-role="provider">Proveedor</button>
+    </div>
+    <div class="topbar-right">
+      <div class="clock" id="clock">—</div>
+      <div class="userchip" id="userChip"></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ VISTA: ADMINISTRADOR DEL EVENTO ============ -->
+    <section id="view-admin" class="view enter">
+
+      <div class="event-hero reveal">
+        <div>
+          <div class="tag-live"><span class="dot"></span>EVENTO ACTIVO</div>
+          <h1 class="event-title" id="evTitle">Gala <em>Aniversario</em> Valdemar</h1>
+          <div class="event-meta">
+            <span><i data-lucide="calendar"></i>SÁB 14 JUN 2025 · 20:00 H</span>
+            <span><i data-lucide="map-pin"></i>HACIENDA LA MERCED · VALLE DE GUADALUPE</span>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button type="button" class="btn" data-action="open-web"><i data-lucide="external-link"></i>Web
+            pública</button>
+          <button type="button" class="btn solid" data-action="share"><i data-lucide="link"></i>Copiar enlace</button>
+        </div>
+      </div>
+
+      <section class="reveal" style="animation-delay:.06s">
+        <div class="metrics-head">
+          <span class="sec-label">CIFRAS DE INVITACIÓN</span>
+          <span class="metrics-upd" id="metricsUpd">ACTUALIZADO —</span>
+        </div>
+        <div class="funnel" id="funnel">
+          <div class="fseg conf" id="segConf"></div>
+          <div class="fseg sent" id="segSent"></div>
+          <div class="fseg unsent" id="segUnsent"></div>
+          <div class="fseg dec" id="segDec"></div>
+        </div>
+        <div class="legend">
+          <span class="lgi"><span class="swatch conf"></span>CONFIRMADOS</span>
+          <span class="lgi"><span class="swatch sent"></span>EMAIL ENVIADO · SIN RESPONDER</span>
+          <span class="lgi"><span class="swatch unsent"></span>POR INVITAR</span>
+          <span class="lgi"><span class="swatch dec"></span>DECLINARON</span>
+        </div>
+        <div class="stat-row">
+          <div class="stat">
+            <div class="stat-label">INVITADOS PLANEADOS</div>
+            <div class="stat-num" id="stPlanned">0</div>
+            <div class="stat-bar"><span class="stat-fill" id="sbPlanned"></span></div>
+            <div class="stat-sub">LISTA MAESTRA DEL EVENTO</div>
+          </div>
+          <div class="stat" style="flex-grow:1.08">
+            <div class="stat-label">RECIBIERON EMAIL</div>
+            <div class="stat-num" id="stInvited">0</div>
+            <div class="stat-bar"><span class="stat-fill" id="sbInvited"></span></div>
+            <div class="stat-sub" id="ssInvited">— % DE LA LISTA</div>
+          </div>
+          <div class="stat" style="flex-grow:1.15">
+            <div class="stat-label">CONFIRMARON ASISTENCIA</div>
+            <div class="stat-num" id="stConfirmed">0</div>
+            <div class="stat-bar"><span class="stat-fill" id="sbConfirmed"></span></div>
+            <div class="stat-sub" id="ssConfirmed">— % DE LA LISTA</div>
+          </div>
+          <div class="stat" style="flex-grow:.92">
+            <div class="stat-label">ACOMPAÑANTES</div>
+            <div class="stat-num" id="stComp">0</div>
+            <div class="stat-bar"><span class="stat-fill" id="sbComp"></span></div>
+            <div class="stat-sub" id="ssComp">DE — PREVISTOS · C/U CON QR PROPIO</div>
+          </div>
+          <div class="stat dark">
+            <div class="stat-label">PASES QR EMITIDOS</div>
+            <div class="stat-num" id="stPasses">0</div>
+            <div class="stat-bar"><span class="stat-fill" id="sbPasses"></span></div>
+            <div class="stat-sub" id="ssPasses">TITULARES + ACOMPAÑANTES</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel reveal" style="animation-delay:.12s">
+        <div class="panel-head">
+          <div>
+            <span class="sec-label">REGISTRO DE ACCESO</span>
+            <h2 class="panel-title">Lista de invitados<span class="cnt" id="guestCount"></span></h2>
+          </div>
+          <div class="tools">
+            <div class="search">
+              <i data-lucide="search"></i>
+              <input type="text" id="guestSearch" placeholder="Buscar por nombre, email o pase…">
+            </div>
+            <div class="segf" id="guestFilters"></div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="gtable">
+            <thead>
+              <tr>
+                <th>PASE</th>
+                <th>INVITADO</th>
+                <th>CONTACTO</th>
+                <th>FIESTA</th>
+                <th>ESTADO</th>
+                <th class="ta-r">ACCIONES</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="guestRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel reveal" style="animation-delay:.18s">
+        <div class="panel-head">
+          <div>
+            <span class="sec-label">NUBE INTERNA DEL EVENTO</span>
+            <h2 class="panel-title">Fotografía de invitados</h2>
+          </div>
+          <div class="tools">
+            <span class="pending-flag" id="pendingFlag"></span>
+            <div class="segf" id="photoFilters"></div>
+          </div>
+        </div>
+        <div class="photo-grid" id="photoGrid"></div>
+      </section>
+    </section>
+
+    <!-- ============ VISTA: PROVEEDOR ============ -->
+    <section id="view-provider" class="view" hidden>
+      <div class="pv-hero reveal">
+        <div class="pv-hero-top">
+          <div>
+            <span class="sec-label">NÉBULA EVENTS · PANEL DE PROVEEDOR DEL SERVICIO</span>
+            <h1>Eventos bajo <em>gestión</em></h1>
+          </div>
+          <button type="button" class="btn" style="border-color:var(--cream-line);color:var(--cream)"
+            data-action="new-event">
+            <i data-lucide="plus"></i>Alta de evento
+          </button>
+        </div>
+        <div class="kpi-row" id="kpiRow"></div>
+      </div>
+
+      <div class="pv-body">
+        <div class="events-col reveal" style="animation-delay:.06s">
+          <div class="segfilter" id="eventFilters"></div>
+          <div id="eventList"></div>
+        </div>
+        <aside class="scan-col reveal" style="animation-delay:.12s">
+          <div class="scan-head">
+            <span class="sec-label">ACTIVIDAD DE ESCÁNERES</span>
+            <span class="live-flag"><span class="dot"></span>EN VIVO</span>
+            <button type="button" class="ibtn" id="feedToggle" data-action="feed-toggle" title="Pausar feed"><i
+                data-lucide="pause"></i></button>
+          </div>
+          <div class="feed" id="feedList"></div>
+          <div class="scan-note">LECTURAS QR DEL EQUIPO DE SEGURIDAD · SIMULACIÓN LOCAL</div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer>PASE · SISTEMA DE GESTIÓN DE INVITADOS Y ACCESOS — LOS DATOS DE ESTA DEMO VIVEN ÚNICAMENTE EN TU NAVEGADOR
+  </footer>
+
+  <div class="toasts" id="toasts"></div>
+  <div id="modals"></div>
+
+</body>
+<script src="app.js"></script>
+
+</html>
