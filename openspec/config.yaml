@@ -4,7 +4,7 @@ schema: spec-driven
 context: |
   Tech stack: Angular 22 + SSR (prerender/hydration), TypeScript ~6.0, vitest 4 via `ng test`, Express 5, RxJS 7.8.
   Architecture: standalone components + signals; feature slices (core/features/layout/shared); port of vanilla prototype QR_Z_Open/ (5 slices, 69 tests green).
-  Testing: unit only — vitest 4.1.11 through @angular/build:unit-test; no coverage package, no integration/E2E tools.
+  Testing: unit (vitest 4.1.11 through @angular/build:unit-test, jsdom) + integration (vitest via `npm run test:int`, node env, per-test-file temp SQLite — see design §8); no coverage package, no E2E tools.
   Style: Prettier (.prettierrc) + EditorConfig; no linter installed; NOTE: tsconfig `strict: true` is NOT enabled (only strictInjectionParameters/strictInputAccessModifiers).
 
 strict_tdd: true
@@ -17,8 +17,9 @@ testing:
   coverage_command: "— (requires dev dep @vitest/coverage-v8)"
   layers:
     unit: true
-    integration: false
+    integration: true
     e2e: false
+  integration_test_command: "npm run test:int"
   quality:
     formatter: "npx prettier --check ."
     type_checker: "npx tsc --noEmit -p tsconfig.app.json && ng build"

@@ -13,15 +13,11 @@ const app = express();
 const angularApp = new AngularNodeAppEngine();
 
 /**
- * Example Express Rest API endpoints can be defined here.
- * Uncomment and define endpoints as necessary.
- *
- * Example:
- * ```ts
- * app.get('/api/{*splat}', (req, res) => {
- *   // Handle API request
- * });
- * ```
+ * NOTE: the REST API (/api/*) is intentionally NOT mounted in this SSR entry.
+ * It runs as a standalone Node process (src/server/api/main.ts, `npm run api:start`)
+ * because Angular's esbuild SSR pipeline breaks better-sqlite3's CJS loader
+ * (`ReferenceError: __filename is not defined`). Dev: `ng serve` proxies /api/* to it
+ * via proxy.conf.json. Re-adding an API mount here reintroduces the crash.
  */
 
 /**

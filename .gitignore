@@ -45,3 +45,15 @@ Thumbs.db
 
 # SDD / agent tooling
 /.atl/
+
+# Local environment and SQLite database files (persistence layer)
+.env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Generated Prisma client (regenerate with `npx prisma generate`)
+/src/generated/
+
+/src/generated/prisma
