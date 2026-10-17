@@ -64,6 +64,13 @@ import type { Guest } from '../../core/models';
     .t-qrbox { border: 1px solid var(--ink); border-radius: 4px; padding: 14px; background: #fff; }
     .t-qrbox canvas { display: block; width: 200px; height: 200px; image-rendering: pixelated; }
     .btn.sm { padding: 8px 12px; font: 600 10px 'IBM Plex Mono'; letter-spacing: 0.12em; text-transform: uppercase; }
+
+    /* Prototype 920 block (QR_Z_Open/style.css:2141-2149). Enforced here, not
+       globally, because these selectors are component-scoped. */
+    @media (max-width: 920px) {
+      .ticket { grid-template-columns: 1fr; }
+      .t-left { border-right: 0; border-bottom: 1px dashed var(--line2); }
+    }
   `,
 })
 export class QrTicketModal {

@@ -52,6 +52,14 @@ import { Icon } from '../../../shared/icon';
     .pl-rel { font: 500 9px 'IBM Plex Mono'; letter-spacing: 0.14em; color: var(--soft); }
     .pl-item .ibtn { margin-left: auto; width: 26px; height: 26px; }
     .note-txt { font: 400 13.5px 'Space Grotesk'; color: var(--ink); }
+
+    /* Prototype 920 block (QR_Z_Open/style.css:2131-2139). Enforced here, not
+       globally, because these selectors are component-scoped. */
+    @media (max-width: 920px) {
+      .gd { grid-template-columns: 1fr; }
+      .gd-col { border-left: 0; border-top: 1px dashed var(--line2); }
+      .gd-col:first-child { border-top: 0; }
+    }
   `,
 })
 export class GuestDetail {

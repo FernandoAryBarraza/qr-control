@@ -52,12 +52,15 @@ export interface PhotoFilterOption {
   `,
   styles: `
     :host { display: block; }
-    .panel { background: var(--paper); border: 1px solid var(--ink); border-radius: 4px; padding: 24px 26px 28px; }
+    /* Prototype minimal panel (QR_Z_Open/style.css:583-585): only a top
+       margin — no ink border, radius or heavy padding. */
+    .panel { margin-top: 56px; }
     .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
     .panel-title { font: 550 28px 'Fraunces'; margin-top: 6px; }
     .panel-title .cnt { margin-left: 10px; font: 600 11px 'IBM Plex Mono'; color: var(--soft); }
     .tools { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-    .pending-flag { display: inline-flex; align-items: center; gap: 8px; font: 600 9px 'IBM Plex Mono'; letter-spacing: 0.16em; color: var(--amber); }
+    /* Prototype uses --accent here, not --amber (QR_Z_Open/style.css:679-686). */
+    .pending-flag { display: inline-flex; align-items: center; gap: 8px; font: 600 9px 'IBM Plex Mono'; letter-spacing: 0.16em; color: var(--accent); }
     .pending-flag.ok { color: var(--green); }
     .pending-flag .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .sec-label { font: 600 9.5px 'IBM Plex Mono'; letter-spacing: 0.18em; color: var(--soft); }
