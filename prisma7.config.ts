@@ -2,7 +2,7 @@
 // The Prisma 7 CLI does NOT auto-load `.env`; Node's built-in loader keeps env
 // handling in one place without adding a `dotenv` dependency. This mirrors
 // src/server/data/config.ts (runtime side).
-import { defineConfig, env } from 'prisma/config';
+import { defineConfig } from 'prisma/config';
 
 try {
   process.loadEnvFile();
@@ -17,6 +17,10 @@ export default defineConfig({
     // Seed wiring (`seed: 'tsx prisma/seed.ts'`) lands in PR-1b together with prisma/seed.ts.
   },
   datasource: {
-    url: env('DATABASE_URL'),
+    // env() throws when DATABASE_URL is unset, which would make the postinstall
+    // `prisma generate` fail on a fresh clone (no .env yet). Fall back to the
+    // .env.example default; the server runtime still fails fast with a clear
+    // message (src/server/data/config.ts).
+    url: process.env['DATABASE_URL'] || 'file:./dev.db',
   },
 });

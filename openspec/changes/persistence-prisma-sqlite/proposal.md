@@ -194,7 +194,7 @@ This change **will** exceed 400 lines; the question is only how it is split.
 - **Chained PRs are recommended: YES** (well beyond the 400-line review budget; this qualifies
   under the chained-pr trigger for PRs >400 lines). Suggested split:
   1. **PR-1**: Prisma setup + schema + migration + seed + gitignore/env + read-only GET endpoints
-     + repository/authorization skeleton + hydration-safe read path.
+     - repository/authorization skeleton + hydration-safe read path.
   2. **PR-2**: Server-side authorization layer + event/guest/photo write endpoints (BR-02–BR-04,
      BR-06, BR-12 admin-side `active` toggles) + client mutation wiring.
   3. **PR-3**: Second-admin approval workflow (BR-05) + QR issuance/check-in (BR-07–BR-11) +

@@ -23,15 +23,15 @@
 
 ### 1. Where the test data lives
 
-| File | Contents | Shape |
-|---|---|---|
-| `src/app/core/seed-data.ts` (176 lines) | **The single source of test data.** `GUESTS` (14), `PHOTOS` (14, derived from `PHOTO_DEFS`), `EVENTS` (3), `APP_STATES`, `GATES`, `STORAGE_PLANS`, `PUBLIC_WEB_URL`, `USERS` | Verbatim transcription of the prototype `QR_Z_Open/app.js:38-154,169-180,717,809`. All `readonly`, string-literal unions, Spanish content |
-| `src/app/core/models.ts` (197 lines) | Domain types: `Guest`, `PartyMember`, `Pass`, `EventPhoto`, `PaseEvent`, `SecurityGuard`, `EventAdmin`, `StorageBreakdown`, `PaseUser`, `Metrics`, `FeedItem`, … | Pure type layer, no runtime data. All fields `readonly`; status fields are string-literal unions (`GuestStatus`, `PhotoState`, `EventStatus`, `ScanAppState`) |
-| `QR_Z_Open/app.js:38-180` | Original prototype dataset (`GUESTS`, `APP_STATES`, `passPool` build, `GATES`) | Vanilla JS, no storage at all — every reload replays the snapshot. Reference only; not imported by the app |
-| `src/app/features/admin/guests/guest-table.spec.ts:14` | Local 3-row `GUESTS` fixture | Test-only, independent of seed-data |
-| `src/app/core/metrics.spec.ts:1` | Imports `GUESTS`, `EVENTS`, `PHOTOS` from seed-data | Seed data is load-bearing for tests (immutability assertions, metric snapshots) |
-| `scripts/verify-parity.mjs` | Static file server + HTML comparator for prototype parity | Holds no data |
-| No `*.json` data fixtures, no `scripts/seed*`, no backend data files exist | — | — |
+| File                                                                       | Contents                                                                                                                                                                     | Shape                                                                                                                                                         |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/app/core/seed-data.ts` (176 lines)                                    | **The single source of test data.** `GUESTS` (14), `PHOTOS` (14, derived from `PHOTO_DEFS`), `EVENTS` (3), `APP_STATES`, `GATES`, `STORAGE_PLANS`, `PUBLIC_WEB_URL`, `USERS` | Verbatim transcription of the prototype `QR_Z_Open/app.js:38-154,169-180,717,809`. All `readonly`, string-literal unions, Spanish content                     |
+| `src/app/core/models.ts` (197 lines)                                       | Domain types: `Guest`, `PartyMember`, `Pass`, `EventPhoto`, `PaseEvent`, `SecurityGuard`, `EventAdmin`, `StorageBreakdown`, `PaseUser`, `Metrics`, `FeedItem`, …             | Pure type layer, no runtime data. All fields `readonly`; status fields are string-literal unions (`GuestStatus`, `PhotoState`, `EventStatus`, `ScanAppState`) |
+| `QR_Z_Open/app.js:38-180`                                                  | Original prototype dataset (`GUESTS`, `APP_STATES`, `passPool` build, `GATES`)                                                                                               | Vanilla JS, no storage at all — every reload replays the snapshot. Reference only; not imported by the app                                                    |
+| `src/app/features/admin/guests/guest-table.spec.ts:14`                     | Local 3-row `GUESTS` fixture                                                                                                                                                 | Test-only, independent of seed-data                                                                                                                           |
+| `src/app/core/metrics.spec.ts:1`                                           | Imports `GUESTS`, `EVENTS`, `PHOTOS` from seed-data                                                                                                                          | Seed data is load-bearing for tests (immutability assertions, metric snapshots)                                                                               |
+| `scripts/verify-parity.mjs`                                                | Static file server + HTML comparator for prototype parity                                                                                                                    | Holds no data                                                                                                                                                 |
+| No `*.json` data fixtures, no `scripts/seed*`, no backend data files exist | —                                                                                                                                                                            | —                                                                                                                                                             |
 
 ### Entity/relationship inventory (as-is, all in-memory)
 
@@ -69,7 +69,7 @@
   `passPool = signal(passPoolOf(GUESTS))`. All mutations (`sendInvite`,
   `confirmGuest`, `setPhotoState`, `toggleDownload`, `applyPlan`) are immutable
   `update()` calls on these signals — **in-memory only, lost on reload**.
-  Documented explicitly: *"There is no persistence."*
+  Documented explicitly: _"There is no persistence."_
 - **Consumers of `PaseStore`**: `admin-view.ts`, `provider-view.ts`,
   `contact-modal.ts`, `photo-lightbox.ts`, `feed.service.ts`, `app.ts` (root).
   Derived data flows through `computed()` (`metrics`, `funnel`, `visibleGuests`,
@@ -118,7 +118,7 @@ signals after hydration. Prisma Client lives **server-side only** (Node process)
 - **−** Largest task count; strict TDD means an integration-test layer that does
   not exist yet (openspec config currently has `layers.integration: false`).
 
-### Approach B — Prisma + SQLite as the *seed generator* only (build-time data pipeline)
+### Approach B — Prisma + SQLite as the _seed generator_ only (build-time data pipeline)
 
 Prisma/SQLite manages schema + seed, but a script (`prisma/seed.ts` →
 `scripts/generate-seed.ts`) emits the typed TS/JSON fixture the app imports today.
@@ -126,7 +126,7 @@ The app runtime stays exactly as-is (signals, no fetch).
 
 - **+** Minimal app-side change; zero hydration/SSR risk; seed data stays
   deterministic and test-friendly (`metrics.spec.ts` keeps working unmodified).
-- **+** Prisma schema becomes the *design* artifact for the future Postgres move;
+- **+** Prisma schema becomes the _design_ artifact for the future Postgres move;
   migrations folder starts life immediately.
 - **−** No runtime persistence — arguably not what "cambiar a SQLite con Prisma"
   means if the user expects reads/writes to hit a DB.
@@ -158,7 +158,7 @@ Approach A, plus explicit portability guardrails:
      selected via `--schema` variants or env-specific schema files
      `schema.sqlite.prisma` / `schema.postgresql.prisma`). More ceremony; only
      worth it if real production data will exist before the switch.
-   **Recommendation: D1** unless proposal reveals production data before migration.
+     **Recommendation: D1** unless proposal reveals production data before migration.
 2. **No Prisma enums** (SQLite doesn't support them) → keep status fields as
    `String` + existing TS string-literal unions in `models.ts`. This already
    matches the codebase style, and `@prisma/client` types get mapped to the
@@ -184,7 +184,7 @@ Approach A, plus explicit portability guardrails:
 **Approach D (A + portability guardrails), with D1 migration strategy.**
 
 Rationale: the user's intent says "use the project's test data, move it to SQLite
-with Prisma, *afterwards* migrate to PostgreSQL" — that is a runtime persistence
+with Prisma, _afterwards_ migrate to PostgreSQL" — that is a runtime persistence
 goal with a future provider switch, i.e. Approach A. D's guardrails (no enums, no
 Prisma types outside the server, single-line provider switch, seed re-play
 instead of migration porting) make the Postgres move a configuration event rather

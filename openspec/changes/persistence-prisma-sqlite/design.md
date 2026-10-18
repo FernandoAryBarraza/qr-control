@@ -6,15 +6,15 @@ Approach D/D1). All 7 proposal open questions are resolved below with rationale.
 
 ## 1. Resolved decisions (proposal §Open Questions)
 
-| # | Question | Decision |
-|---|----------|----------|
-| 1 | QR image format | **PNG, server-side via the `qrcode` npm lib**; payload = absolute verify URL containing an opaque 256-bit token (see §6) |
-| 2 | Integration test layer | **Approved**: flip `testing.layers.integration: true`; Node-env vitest project + per-test-file temp SQLite file (§8) |
-| 3 | Migration strategy | **D1** — single `prisma/migrations`; Postgres switch = provider literal edit + fresh initial migration + reset-and-reseed |
-| 4 | Render mode | **Keep `Prerender` + post-hydration client fetch**; reject `RenderMode.Server` (§5) |
-| 5 | Dev `/api/*` passthrough | **Standalone API process + dev proxy (approved deviation A1)** — `reqHandler` passthrough FAILED (CJS `__filename` crash in Angular's ESM SSR bundle, both dev and prod); `ng serve` now proxies `/api/*` to the API on `API_PORT` (default 3000) via `proxy.conf.json` (see deviation A1 below) |
-| 6 | Postgres switch + BR-18 data | **Literal provider switch + reset-and-reseed**; distinguishable data via a `SystemSetting` seed-origin marker verified by `npm run db:verify` (§9) |
-| 7 | Provider UI vs admin UI | **Defer the UI split**; scope API routes by role now so the future split is routing-only (§10) |
+| #   | Question                     | Decision                                                                                                                                                                                                                                                                                         |
+| --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | QR image format              | **PNG, server-side via the `qrcode` npm lib**; payload = absolute verify URL containing an opaque 256-bit token (see §6)                                                                                                                                                                         |
+| 2   | Integration test layer       | **Approved**: flip `testing.layers.integration: true`; Node-env vitest project + per-test-file temp SQLite file (§8)                                                                                                                                                                             |
+| 3   | Migration strategy           | **D1** — single `prisma/migrations`; Postgres switch = provider literal edit + fresh initial migration + reset-and-reseed                                                                                                                                                                        |
+| 4   | Render mode                  | **Keep `Prerender` + post-hydration client fetch**; reject `RenderMode.Server` (§5)                                                                                                                                                                                                              |
+| 5   | Dev `/api/*` passthrough     | **Standalone API process + dev proxy (approved deviation A1)** — `reqHandler` passthrough FAILED (CJS `__filename` crash in Angular's ESM SSR bundle, both dev and prod); `ng serve` now proxies `/api/*` to the API on `API_PORT` (default 3000) via `proxy.conf.json` (see deviation A1 below) |
+| 6   | Postgres switch + BR-18 data | **Literal provider switch + reset-and-reseed**; distinguishable data via a `SystemSetting` seed-origin marker verified by `npm run db:verify` (§9)                                                                                                                                               |
+| 7   | Provider UI vs admin UI      | **Defer the UI split**; scope API routes by role now so the future split is routing-only (§10)                                                                                                                                                                                                   |
 
 Additional proposal questions (beyond the 7): env handling = `.env` (gitignored) + committed
 `.env.example`, loaded by Prisma CLI natively and by `dotenv/config` at server runtime; catalogs
@@ -268,25 +268,25 @@ the standalone API process (`npm run api:start`, port `API_PORT`=3000); `ng serv
 `CallerContext` middleware resolves the user from `x-user-id`; every route declares
 its role + scope check:
 
-| Route | Roles | Scope check |
-|---|---|---|
-| `GET /api/health` | any | none (smoke/passthrough check, returns provider marker) |
-| `GET /api/events` | provider: all; admin/security: assigned only | list filter by assignments |
-| `POST /api/events` | provider only (BR-02) | role + ≥1 admin required |
-| `GET /api/events/:id` | provider any; admin/security assigned | event scope (BR-03) |
-| `PATCH /api/events/:id` | provider only (retention, status) | role |
-| `DELETE /api/events/:id` (purge) | provider + `status=finished` (BR-12) | role + state check |
-| `GET/POST /api/events/:id/guests` | read: provider any / assigned admin; write: assigned admin | object-level on `:id` (BR-04) |
-| `PATCH /api/guests/:id` (status/active) | assigned admin (BR-13: toggle, never delete) | resolve `guest.eventId`, compare |
-| `GET/POST /api/events/:id/photos`, `PATCH /api/photos/:id` | read: provider/assigned admin; write: assigned admin | object-level via `photo.eventId` |
-| `POST /api/check-ins` | assigned security/admin | token → event; caller must be assigned to that event |
-| `POST /api/events/:id/qr` (incl. `kind=emergency`, BR-10) | assigned admin | event scope |
-| `GET /api/qr/verify/:token` | assigned security/admin | token resolves event; caller assigned to it |
-| `GET /api/qr/image/:token` | assigned admin | scope |
-| `POST /api/events/:id/admin-requests` | assigned admin (BR-05) | scope + role |
-| `PATCH /api/admin-requests/:id` | provider only (approve/reject) | role; admin self-approve rejected |
-| `GET /api/events/:id/members` | provider any; assigned admin (BR-06) | scope |
-| `POST /api/events/:id/members` | assigned admin (create security) | scope + role; provider forbidden |
+| Route                                                      | Roles                                                      | Scope check                                             |
+| ---------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| `GET /api/health`                                          | any                                                        | none (smoke/passthrough check, returns provider marker) |
+| `GET /api/events`                                          | provider: all; admin/security: assigned only               | list filter by assignments                              |
+| `POST /api/events`                                         | provider only (BR-02)                                      | role + ≥1 admin required                                |
+| `GET /api/events/:id`                                      | provider any; admin/security assigned                      | event scope (BR-03)                                     |
+| `PATCH /api/events/:id`                                    | provider only (retention, status)                          | role                                                    |
+| `DELETE /api/events/:id` (purge)                           | provider + `status=finished` (BR-12)                       | role + state check                                      |
+| `GET/POST /api/events/:id/guests`                          | read: provider any / assigned admin; write: assigned admin | object-level on `:id` (BR-04)                           |
+| `PATCH /api/guests/:id` (status/active)                    | assigned admin (BR-13: toggle, never delete)               | resolve `guest.eventId`, compare                        |
+| `GET/POST /api/events/:id/photos`, `PATCH /api/photos/:id` | read: provider/assigned admin; write: assigned admin       | object-level via `photo.eventId`                        |
+| `POST /api/check-ins`                                      | assigned security/admin                                    | token → event; caller must be assigned to that event    |
+| `POST /api/events/:id/qr` (incl. `kind=emergency`, BR-10)  | assigned admin                                             | event scope                                             |
+| `GET /api/qr/verify/:token`                                | assigned security/admin                                    | token resolves event; caller assigned to it             |
+| `GET /api/qr/image/:token`                                 | assigned admin                                             | scope                                                   |
+| `POST /api/events/:id/admin-requests`                      | assigned admin (BR-05)                                     | scope + role                                            |
+| `PATCH /api/admin-requests/:id`                            | provider only (approve/reject)                             | role; admin self-approve rejected                       |
+| `GET /api/events/:id/members`                              | provider any; assigned admin (BR-06)                       | scope                                                   |
+| `POST /api/events/:id/members`                             | assigned admin (create security)                           | scope + role; provider forbidden                        |
 
 Role grouping in the URL space (events vs standalone object IDs) is deliberate: it keeps the
 future provider/admin UI split a routing-only change (§10).
@@ -300,7 +300,7 @@ future provider/admin UI split a routing-only change (§10).
 - **Payload content**: the absolute URL `<WEB_BASE_URL>/verify/<rawToken>` — stable, emailable
   as-is (email transport itself is a Non-Goal).
 - **Image**: server-side PNG via the `qrcode` npm package (pure JS + pngjs, no native deps;
-  note `qrcode-generator` is already a *client* dep and stays untouched — it cannot render PNG
+  note `qrcode-generator` is already a _client_ dep and stays untouched — it cannot render PNG
   buffers in Node). `QRCode.toBuffer(verifyUrl, { type: 'png', width: 512, margin: 2 })`.
 - **Endpoints**: issuance returns `{ token, verifyUrl }`; `GET /api/qr/image/:token` streams
   `image/png` so clients or email templates embed the image URL.
@@ -321,6 +321,7 @@ future provider/admin UI split a routing-only change (§10).
 ## 8. Testing strategy (open question 2) — strict TDD
 
 **Layer split**:
+
 - **Unit (jsdom, `ng test --watch=false`)** — unchanged scope: components, `computed()` logic,
   plus new `DataService`/`PaseStore.load()` tests with `provideHttpClientTesting` (mock backend).
 - **Integration (node env, new)** — everything DB- or authz-facing: repositories, all BR
@@ -350,7 +351,7 @@ export default defineConfig({
   test: {
     include: ['src/server/**/*.int.spec.ts'],
     environment: 'node',
-    pool: 'forks',            // vitest isolates test files in separate workers
+    pool: 'forks', // vitest isolates test files in separate workers
     testTimeout: 20_000,
   },
 });
@@ -358,6 +359,7 @@ export default defineConfig({
 
 **DB isolation**: per **test file**, not per test —
 `src/server/testing/integration-harness.ts` in `beforeAll`:
+
 1. `dir = await mkdtemp(join(tmpdirdir(), 'qr-int-'))`
 2. `process.env['DATABASE_URL'] = 'file:' + join(dir, 'test.db')` (temp **file**, not
    in-memory — Prisma SQLite `file::memory:?cache=shared` support is unreliable; a temp file is
@@ -366,9 +368,9 @@ export default defineConfig({
    this simultaneously isolates the DB **and** verifies the real migrations apply cleanly
 4. Build the API on an ephemeral port (`app.listen(0)`) and exercise it with global `fetch`
    (Node 20 — no supertest dependency)
-`afterAll`: `$disconnect` + `rm -rf dir`. `beforeEach`: a `resetDatabase()` helper
-(`deleteMany` in FK-safe order) — cheap at this data scale. Each worker file having its own temp
-DB makes cross-file parallelism safe.
+   `afterAll`: `$disconnect` + `rm -rf dir`. `beforeEach`: a `resetDatabase()` helper
+   (`deleteMany` in FK-safe order) — cheap at this data scale. Each worker file having its own temp
+   DB makes cross-file parallelism safe.
 
 **npm scripts** (added in PR-1a; existing `"test": "ng watch"` left untouched):
 
@@ -416,7 +418,7 @@ fails in `ng test`, server/BR behavior fails in `test:int`; a task is done only 
 **BR-18 distinguishable data**: the seed stamps `seed:origin = 'sqlite' | 'postgresql'` **from
 the datasource provider string at seed time**. `npm run db:verify` asserts the marker equals the
 provider currently configured in `schema.prisma`; integration tests assert the marker exists in
-every seeded test DB. This makes the active provider observable *in the data itself*, exactly as
+every seeded test DB. This makes the active provider observable _in the data itself_, exactly as
 the spec scenario demands, with one tiny table and zero vendor lock-in.
 
 ## 10. Provider UI vs admin UI (open question 7)
@@ -424,39 +426,40 @@ the spec scenario demands, with one tiny table and zero vendor lock-in.
 **Defer the UI split.** Rationale: there is no authentication (Non-Goal) — "who the caller is"
 today is a dev-console header, so separate provider/admin route trees would be cosmetic
 choreography duplicated across two view hierarchies and would double the `DataService` surface
-before the server authorization layer (PR-2) even exists. What we do *now* is the part that
+before the server authorization layer (PR-2) even exists. What we do _now_ is the part that
 actually matters: the API is role-scoped (§5), so when auth lands, the UI split is pure routing
-+ component reuse. The current `provider-view`/`admin-view` components keep working against the
-same store.
+
+- component reuse. The current `provider-view`/`admin-view` components keep working against the
+  same store.
 
 ## 11. PR/slice split (400-line budget; chained-pr rules apply)
 
 Slice 1 **can** be split — the pre-approved `size:exception` is therefore **not consumed**:
 
-| PR | Contents | Est. lines (incl. tests) | Sub-split risk |
-|---|---|---|---|
-| **1a** | Prisma deps + schema + initial migration + `.gitignore`(`.db`) + `.env.example` + dotenv wiring + config.yaml flip + `vitest.integration.config.ts` + harness + 1 smoke integration test | ~250–350 | Schema+SQL are declarative; **if >400, the exception applies here** (schema ≈150 + SQL ≈100 are review-light) |
-| **1b** | `prisma/seed.ts` + `db:seed`/`db:reset` scripts + `SystemSetting` marker + seed integration tests | ~200–300 | low |
-| **1c** | Read-only GET endpoints + repositories + `CallerContext` + authz skeleton + integration tests (fetch on ephemeral port) | ~300–400 | borderline; split routes/tests if it balloons |
-| **1d** | Client `DataService` + `PaseStore.load()` + hydration-safe `afterNextRender` wiring + unit tests (mock HTTP) | ~250–350 | low |
-| **2a** | Write endpoints + full authz enforcement (BR-02–04, BR-06, BR-13 toggles) + integration tests | ~350–450 | **likely needs sub-split** (authz tests balloon — split by route group) |
-| **2b** | Client mutation wiring (optimistic signal updates) | ~200–300 | low |
-| **3a** | Second-admin approval workflow (BR-05) | ~250–350 | low |
-| **3b** | QR issuance + check-in + verify/image endpoints + emergency QRs (BR-07–11, BR-17) | ~350–450 | **borderline**; if >400, split verify/image read path from issuance/write |
-| **4** | Retention + provider purge (BR-12, BR-14, BR-15) + BR-18 `db:verify` + Postgres-switch dry-run doc + `seed-data.ts` runtime decoupling + bundle-grep check | ~300–400 | low |
+| PR     | Contents                                                                                                                                                                                 | Est. lines (incl. tests) | Sub-split risk                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| **1a** | Prisma deps + schema + initial migration + `.gitignore`(`.db`) + `.env.example` + dotenv wiring + config.yaml flip + `vitest.integration.config.ts` + harness + 1 smoke integration test | ~250–350                 | Schema+SQL are declarative; **if >400, the exception applies here** (schema ≈150 + SQL ≈100 are review-light) |
+| **1b** | `prisma/seed.ts` + `db:seed`/`db:reset` scripts + `SystemSetting` marker + seed integration tests                                                                                        | ~200–300                 | low                                                                                                           |
+| **1c** | Read-only GET endpoints + repositories + `CallerContext` + authz skeleton + integration tests (fetch on ephemeral port)                                                                  | ~300–400                 | borderline; split routes/tests if it balloons                                                                 |
+| **1d** | Client `DataService` + `PaseStore.load()` + hydration-safe `afterNextRender` wiring + unit tests (mock HTTP)                                                                             | ~250–350                 | low                                                                                                           |
+| **2a** | Write endpoints + full authz enforcement (BR-02–04, BR-06, BR-13 toggles) + integration tests                                                                                            | ~350–450                 | **likely needs sub-split** (authz tests balloon — split by route group)                                       |
+| **2b** | Client mutation wiring (optimistic signal updates)                                                                                                                                       | ~200–300                 | low                                                                                                           |
+| **3a** | Second-admin approval workflow (BR-05)                                                                                                                                                   | ~250–350                 | low                                                                                                           |
+| **3b** | QR issuance + check-in + verify/image endpoints + emergency QRs (BR-07–11, BR-17)                                                                                                        | ~350–450                 | **borderline**; if >400, split verify/image read path from issuance/write                                     |
+| **4**  | Retention + provider purge (BR-12, BR-14, BR-15) + BR-18 `db:verify` + Postgres-switch dry-run doc + `seed-data.ts` runtime decoupling + bundle-grep check                               | ~300–400                 | low                                                                                                           |
 
 ## 12. Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Hydration mismatch (NG0500/0502 scars) | Identical `loading` initial state server+client; fetch only in `afterNextRender`; acceptance = zero NG05xx on load |
+| Risk                                                                         | Mitigation                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hydration mismatch (NG0500/0502 scars)                                       | Identical `loading` initial state server+client; fetch only in `afterNextRender`; acceptance = zero NG05xx on load                                                                                                                                                                                              |
 | SSR-hosted `/api/*` crashes (native CJS `better-sqlite3` vs Angular ESM SSR) | **Resolved — deviation A1 (§1):** API runs as a standalone process (`npm run api:start`, port 3000); `ng serve` proxies `/api/*` via `proxy.conf.json`; `server.mjs` no longer imports Prisma (bundle-guard grep = 0 in browser + server bundle). Smoke: direct 200, proxy 200, 502 on API stop, 200 on restart |
-| SQLite FK cascade off → purge doesn't cascade | Prisma enables `PRAGMA foreign_keys=ON` by default; an integration test *proves* purge deletes all scoped rows — if it fails, add the pragma to the initial migration |
-| Prisma types leak / browser bundle breaks | Import boundary `src/server/**` only; `ng build` + grep `dist/browser` for `@prisma`/query-engine (task in PR-4, checked per PR) |
-| `tsconfig` not fully strict + Prisma generated types | `npx tsc --noEmit` after install (PR-1a); fix generator settings if `noPropertyAccessFromIndexSignature` conflicts |
-| Integration harness slow (migrate deploy per file) | Accept ~2–5 s/file at demo scale; fallback: pre-built template DB copied per worker (only if measured slow) |
-| Dirty working tree | Additive paths only (`prisma/`, `src/server/`, `src/app/core/api/`); never stage/commit; `seed-data.ts` untouched until PR-4 |
-| `qrcode` lib adds a dep | Server-only, pure JS (pngjs), no native build; verify license (MIT) at install |
+| SQLite FK cascade off → purge doesn't cascade                                | Prisma enables `PRAGMA foreign_keys=ON` by default; an integration test _proves_ purge deletes all scoped rows — if it fails, add the pragma to the initial migration                                                                                                                                           |
+| Prisma types leak / browser bundle breaks                                    | Import boundary `src/server/**` only; `ng build` + grep `dist/browser` for `@prisma`/query-engine (task in PR-4, checked per PR)                                                                                                                                                                                |
+| `tsconfig` not fully strict + Prisma generated types                         | `npx tsc --noEmit` after install (PR-1a); fix generator settings if `noPropertyAccessFromIndexSignature` conflicts                                                                                                                                                                                              |
+| Integration harness slow (migrate deploy per file)                           | Accept ~2–5 s/file at demo scale; fallback: pre-built template DB copied per worker (only if measured slow)                                                                                                                                                                                                     |
+| Dirty working tree                                                           | Additive paths only (`prisma/`, `src/server/`, `src/app/core/api/`); never stage/commit; `seed-data.ts` untouched until PR-4                                                                                                                                                                                    |
+| `qrcode` lib adds a dep                                                      | Server-only, pure JS (pngjs), no native build; verify license (MIT) at install                                                                                                                                                                                                                                  |
 
 ## 13. Explicitly deferred
 
