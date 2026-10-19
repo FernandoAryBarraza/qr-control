@@ -1,9 +1,10 @@
-# Apply progress: persistence-prisma-sqlite — PR-1a + PR-1b
+# Apply progress: persistence-prisma-sqlite — PR-1a + PR-1b + PR-1c
 
-Phase: `sdd-apply`. Scope: PR-1a (tasks 1a.1–1a.13, DONE through commit `76779ed`) and the
-PR-1b continuation batch (tasks 1b.1–1b.5, UNCOMMITTED — orchestrator owns commits). Strict
-TDD active in both.
-Chain position: `1a ✅ → 📍 1b (work done, tree dirty) → 1c → 1d → 2a → 2b → 3a → 3b → 4`.
+Phase: `sdd-apply`. Scope: PR-1a (tasks 1a.1–1a.13, DONE through commit `76779ed`), the
+PR-1b continuation batch (tasks 1b.1–1b.5, DONE through commit `e5e08f4`), and the PR-1c
+continuation batch (tasks 1c.1–1c.7, UNCOMMITTED — orchestrator owns commits). Strict TDD
+active in all three.
+Chain position: `1a ✅ → 1b ✅ → 📍 1c (work done, tree dirty) → 1d → 2a → 2b → 3a → 3b → 4`.
 
 ## Status
 
@@ -334,3 +335,136 @@ deliberately deferred to that slice — see the 1c/3a handoff note above.
 - **Code-line count vs 400 budget:** ≈ **270** code lines excl. comments/blank — inside
   budget (estimate band was 170–250; the month map + deterministic-ID plumbing explain the
   overshoot). Low risk, as forecast.
+
+---
+
+# PR-1c — Read-only GET endpoints + repositories + CallerContext + authz skeleton (tasks 1c.1–1c.7)
+
+Continuation batch executed under strict TDD. Working tree carries ONLY the 1c footprint
+(13 paths: 10 new + 3 modified), nothing staged/committed (HEAD `e5e08f4`).
+
+## Status
+
+| Task                                    | Status | Verification                                                                                                                                                                                                                                        |
+| --------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1c.1 authz integration spec (RED→GREEN) | ✅     | **RED:** `Cannot find module './authz'` (0 tests). **GREEN:** final spec = 7 tests (6 + W1 spoofed-role regression); caller context reads the DB role, rejects unknown/missing, decision matrix covers provider/admin/security + content narrowing. |
+| 1c.2 `authz.ts` + `caller-context.ts`   | ✅     | Pure decision functions over `CallerContext`; `x-user-id` only, role from `User` row; unknown/invalid role → 401 with a fixed payload (no echo).                                                                                                    |
+| 1c.3 per-route GET suites (RED→GREEN)   | ✅     | **RED observed:** `Tests 15 failed \| 1 passed (16)` — every new route returned 404. **GREEN:** 29/29 int after the final consolidation (6 files); 30/30 after the W1 regression.                                                                   |
+| 1c.4 repositories                       | ✅     | `events.ts` / `guests.ts` / `photos.ts` map Prisma → `PaseEvent` / `Guest` / `EventPhoto`; no Prisma import outside `src/server/**` (grep over `src/app`, `src/server.ts`, `src/main.ts` = 0).                                                      |
+| 1c.5 read routes                        | ✅     | `GET /api/events`, `/events/:id`, `/events/:id/guests`, `/events/:id/photos` through `callerContext` + `canReadEvent`; cross-event reads rejected before payload composition.                                                                       |
+| 1c.6 scope-boundary note                | ✅     | Recorded in this section (see “Scope boundary” below).                                                                                                                                                                                              |
+| 1c.7 PR verification gate               | ✅     | See gate table below.                                                                                                                                                                                                                               |
+
+## Strict TDD evidence (RED → GREEN)
+
+| Task | Test file                          | Layer       | RED evidence                                                                  | GREEN                                       | TRIANGULATE                                                       | REFACTOR                                                     |
+| ---- | ---------------------------------- | ----------- | ----------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1c.1 | `src/server/api/authz.int.spec.ts` | Integration | `Cannot find module './authz'` before any authz module existed                | 8 passed (initial), 6 passed after refactor | 6 cases: DB roles ×3, unknown/missing, scope, canReadEvent matrix | Trimmed helpers; kept every assertion behavior-driven        |
+| 1c.2 | same                               | Integration | Covered by 1c.1 RED (module absent)                                           | Green with 1c.1                             | Provider/admin/security + spoofed-role impossible by API shape    | `res.locals` handoff; single `canReadEvent` predicate        |
+| 1c.3 | `events                            | guests      | photos.int.spec.ts`                                                           | Integration                                 | 15 failed / 1 passed (16) — routes absent, all reads 404          | 32 passed (final pre-consolidation 29)                       | List/detail/404/403/401 + mapping fields + empty own-list cases | Table-driven cases; strict-equality no-leak assertions |
+| 1c.4 | covered by route suites            | Integration | Assertions on mapped `dateLabel`, `done`, party, `sizeKb/1000`, `HH:mm`, URLs | Green with 1c.5                             | Provider + assigned admin + other admin paths                     | Single-pass assignment mapping; synthesized display defaults |
+| 1c.5 | covered by route suites            | Integration | 404 on every route before implementation                                      | Green                                       | All four routes plus cross-event detail/guests/photos             | Guard middleware resolves assignments once per request       |
+
+## Verification gates (actual output)
+
+| Gate                                                             | Result                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm test -- --watch=false`                                      | **73 passed (73)**, 4 files — unchanged baseline                                                                                                                                                                                                                                      |
+| `npm run test:int`                                               | **30 passed (30)**, 6 files (1 health + 7 seed + 7 authz + 9 events + 3 guests + 3 photos); includes the W1 spoofed-role regression                                                                                                                                                   |
+| `npx tsc --noEmit -p tsconfig.app.json`                          | exit 0                                                                                                                                                                                                                                                                                |
+| `npx tsc --noEmit -p tsconfig.spec.json`                         | exit 0                                                                                                                                                                                                                                                                                |
+| `npx ng build`                                                   | exit 0, prerender 1 static route, no NG05xx                                                                                                                                                                                                                                           |
+| `npx prettier --check` (PR-1c touched paths)                     | **clean** — each touched code/doc path passes individually. **Scoping caveat:** full-tree `npx prettier --check .` exits 1 on **76 PRE-EXISTING untouched files** (baseline issue, not introduced by this batch); the gate claim above is therefore scoped to the touched paths only. |
+| Smoke `GET /api/health` (standalone API :3000)                   | **200** `{"status":"ok","provider":"sqlite"}`                                                                                                                                                                                                                                         |
+| Smoke `GET /api/events` (`x-user-id: usr-001`)                   | 200, domain-shaped event list (chronological)                                                                                                                                                                                                                                         |
+| Smoke cross-event (`usr-002` → `ev-002`)                         | **403**; no header → **401**                                                                                                                                                                                                                                                          |
+| `md5sum dev.db` before/after `test:all`                          | **identical** (`6c2d5f404b23fe6a79427ed9727180ff`) — integration suite is hermetic                                                                                                                                                                                                    |
+| Prisma boundary grep (`src/app`, `src/server.ts`, `src/main.ts`) | **0 matches** for `@prisma` / `generated/prisma`                                                                                                                                                                                                                                      |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank)
+
+| Unit                          | Lines   |
+| ----------------------------- | ------- |
+| `api/authz.ts`                | 22      |
+| `api/caller-context.ts`       | 26      |
+| `api/index.ts` (diff delta)   | 36      |
+| `api/authz.int.spec.ts`       | 72      |
+| `api/events.int.spec.ts`      | 48      |
+| `api/guests.int.spec.ts`      | 41      |
+| `api/photos.int.spec.ts`      | 40      |
+| `data/repositories/events.ts` | 56      |
+| `data/repositories/guests.ts` | 22      |
+| `data/repositories/photos.ts` | 21      |
+| **Total**                     | **384** |
+
+**Counting method:** new files count every code line (comments/blank excluded); MODIFIED
+files count the diff delta only. `api/index.ts` had 8 code lines at `HEAD`, so its 44-line
+total contributes **36**, not 44 — the earlier 392 figure mistakenly counted the whole file.
+
+**Full PR-1c total, including the post-review follow-up:** the table above covers the batch
+as reviewed (= **384**, 16 lines of headroom). The follow-up applied so the review could
+pass added **21** code lines: W1 role-spoofing regression test (**+19** in
+`api/authz.int.spec.ts`), the re-export line in `api/authz.ts` (**+1**), and the neutral
+S4 module `data/event-scope.ts` (**+1**). Delta-inclusive total = **405**, i.e. **5 code
+lines over the 400-line review budget** — all of it test/type plumbing, no runtime behavior
+change. Disclosed rather than hidden: this is a 5-line overage, not a 5-line headroom.
+
+The first drafts landed at 583; the
+reduction came from a single scope predicate (`canReadEvent(kind)`), one-pass assignment
+mapping, repository defaults, and table-driven route cases — NOT from dropping scenarios.
+
+## Recorded decisions & deviations (PR-1c)
+
+1. **Guest/photo reads are provider + assigned admin only** (design §5 content column).
+   Assigned `security` staff get 403 on those two routes; they still see their assigned
+   events via `GET /api/events` and `GET /api/events/:id`. This is design-consistent, not an
+   omission — PR-3b gives security its scanning/verify surface.
+2. **`GET /api/events` is ordered by `start` ascending** (chronological). The seeded events
+   therefore return as `ev-003` (May), `ev-001` (June), `ev-002` (July).
+3. **Domain fields with no storage column are synthesized**, per design §3/§9: `used/max`
+   = 0, `br` = zero breakdown, `cd` = null, admin `email/phone/since` = empty strings,
+   `EventPhoto.seed` = row id, `EventPhoto.big` falls back to `url`. Counters that the
+   design redefines as client `computed()` values (`guests`/`photos`) are returned as row
+   counts so the client can render immediately.
+4. **`dateLabel` is synthesized from `start` in UTC** (`02 MAY 2025 · 09:00`), matching the
+   prototype's label shape; the DB never stores it (1b handoff).
+5. **Unknown event semantics:** provider → 404; admin/security get the scope rejection
+   (403) without an existence probe, so event IDs are not enumerable across scopes.
+6. **Caller header only:** `x-user-role` (and any client-supplied role) is ignored; the
+   role always comes from the `User` row. An unknown stored role is treated as no context.
+
+## Scope boundary (task 1c.6)
+
+Object-level access-by-ID rejection for writes (spec req 3 scenario 3) and every write path
+is PR-2a, together with the mutation endpoints. PR-1c covers **list/detail scoping only**:
+`/api/events`, `/api/events/:id`, `/api/events/:id/guests`, `/api/events/:id/photos`. The
+cross-event assertions use strict payload equality, so a 403 response is exactly
+`{ statusCode: 403, message: 'Forbidden' }` and cannot carry event-scoped data.
+
+## PR-2a handoff notes (from PR-1c review)
+
+- **Status validation is deferred (S3).** The read repositories currently cast persisted
+  strings without checking them: `events.ts` (`event.status as PaseEvent['status']`),
+  `guests.ts` (`guest.status as GuestStatus`), and `photos.ts` (`photo.state as PhotoState`).
+  That is safe for today's seed-only data but trusts the DB. Spec req 16 scenario 3 requires
+  value validation at the application layer. PR-2a must add parsers/guards (single shared
+  helper or per-repository predicates) that reject unknown status values **before** widening
+  write paths, instead of extending the casts to mutations.
+- **`active` is missing from reads (S5).** Guest and photo read shapes do not expose the
+  persisted `active` flag today (`repositories/guests.ts` and `photos.ts`); the domain
+  `Guest`/`EventPhoto` interfaces have no such field. Spec req 13 (Admin Soft Toggles) needs
+  it as soon as write toggles land, including the "guest still exists with `active` false"
+  and sibling-isolation scenarios. That is a domain interface change (add the field to the
+  read shape and mapping) and must land with PR-2a, not as an ad-hoc route field.
+
+## Files touched (PR-1c, uncommitted)
+
+- **New:** `src/server/api/authz.ts`, `src/server/api/caller-context.ts`,
+  `src/server/api/authz.int.spec.ts` (incl. W1 spoofed-role regression), `src/server/api/events.int.spec.ts`,
+  `src/server/api/guests.int.spec.ts`, `src/server/api/photos.int.spec.ts`,
+  `src/server/data/repositories/{events,guests,photos}.ts`, `src/server/data/event-scope.ts`
+  (S4 neutral `EventScope` type, re-exported by `authz.ts`)
+- **Modified:** `src/server/api/index.ts` (health kept, four read routes added),
+  `tasks.md` (1c checkboxes), this file
+- **Total:** 13 paths (10 new + 3 modified), matching `git status --porcelain`.
+- **Untouched:** `src/app/**`, `prisma/**`, `.env`, `dev.db`, all pre-existing dirty paths

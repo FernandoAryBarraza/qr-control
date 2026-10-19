@@ -258,31 +258,45 @@ untouched (1d not started).
 
 Dependency position: `1a → 1b → 📍 1c → 1d → 2a → 2b → 3a → 3b → 4`
 
-- [ ] **1c.1** **Test-first (RED):** write `src/server/api/authz.int.spec.ts` covering:
+- [x] **1c.1** **Test-first (RED):** write `src/server/api/authz.int.spec.ts` covering:
       `CallerContext` resolved from the trusted `x-user-id` header with the **role read from
       the DB, never the client**; unknown user rejected; decision functions live in a
       dedicated module (not route handlers) so the context source can be swapped later.
       _Traces: BR-01 → spec req 1 (both scenarios, "Authorization is separable from caller
       identity")._
-- [ ] **1c.2** Implement `src/server/api/authz.ts` (pure decision functions over
+- [x] **1c.2** Implement `src/server/api/authz.ts` (pure decision functions over
       `CallerContext = { userId, role }`) + the context-extractor middleware
       (`src/server/api/caller-context.ts`). 🚧 after 1c.1.
-- [ ] **1c.3** **Test-first (RED):** write per-route GET suites —
+- [x] **1c.3** **Test-first (RED):** write per-route GET suites —
       `src/server/api/events.int.spec.ts`, `guests.int.spec.ts`, `photos.int.spec.ts` —
       covering: provider sees all events; admin/security see only assigned events; admin of
       event A requesting event B's list or detail gets a 403-equivalent with **no event B data
       in the payload**. _Traces: BR-03 read-side → spec req 3 (scenarios 1–2); BR-01._
-- [ ] **1c.4** Implement repositories `src/server/data/repositories/{events,guests,photos}.ts`
+- [x] **1c.4** Implement repositories `src/server/data/repositories/{events,guests,photos}.ts`
       mapping Prisma models → the existing `readonly` domain interfaces from
       `src/app/core/models.ts`; Prisma types must not appear outside `src/server/**`.
-- [ ] **1c.5** Implement the read routes per design §5: `GET /api/events` (provider: all;
+- [x] **1c.5** Implement the read routes per design §5: `GET /api/events` (provider: all;
       admin/security: assigned only), `GET /api/events/:id`, `GET /api/events/:id/guests`,
       `GET /api/events/:id/photos` — each passing through the CallerContext + authz checks.
       🚧 after 1c.2–1c.4.
-- [ ] **1c.6** Note in the PR body (chain context): object-level access-by-ID rejection
+- [x] **1c.6** Note in the PR body (chain context): object-level access-by-ID rejection
       (spec req 3 scenario 3) is completed in PR-2a together with the write paths; 1c covers
       list/detail scoping only. _(Explicit boundary, not an omission.)_
-- [ ] **1c.7** Run the PR verification gate (ground rule 2).
+- [x] **1c.7** Run the PR verification gate (ground rule 2).
+
+**PR-1c apply verification (sdd-apply, strict TDD):** `npm test -- --watch=false` 73/73;
+`npm run test:int` 30/30 (1 health + 7 seed + 7 authz + 9 events + 3 guests + 3 photos);
+both `tsc` projects exit 0; `ng build` exit 0 (prerender 1 route, no NG05xx); prettier clean
+on the 13 touched paths (full-tree `prettier --check .` fails on 76 PRE-EXISTING untouched
+files — baseline, not this batch); smoke `GET /api/health` → 200, provider list → 200,
+cross-event detail → 403, no header → 401. RED captured before implementation: authz spec
+failed on `Cannot find module './authz'`; route suites failed 15/16 with every route at 404.
+Code-line count **384** excluding comments/blank for the reviewed batch, **405** including the
+post-review follow-up (W1 role-spoofing regression + S4 neutral `data/event-scope.ts`) — a
+disclosed **5-line overage** of the 400 budget, test/type-only. `md5sum dev.db` identical
+before/after the integration suite. Recorded decisions: security cannot read guest/photo
+lists (design §5), events ordered by `start`, storage-less display fields synthesized.
+Boundary: writes and object-level by-ID rejection remain PR-2a.
 
 **Suggested work-unit commits:**
 
