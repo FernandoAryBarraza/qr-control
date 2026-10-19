@@ -208,26 +208,37 @@ reproducibly loads all demo records with deterministic IDs and stamps the BR-18 
 
 Dependency position: `1a → 📍 1b → 1c → 1d → 2a → 2b → 3a → 3b → 4`
 
-- [ ] **1b.1** Verify `src/app/core/seed-data.ts` imports nothing Angular-specific (design §9;
+- [x] **1b.1** Verify `src/app/core/seed-data.ts` imports nothing Angular-specific (design §9;
       exploration Q8). ⚠️ If it does, stop → decision needed (extract pure data vs thin
-      re-export) before proceeding.
-- [ ] **1b.2** **Test-first (RED):** write `src/server/data/seed.int.spec.ts` asserting, on a
+      re-export) before proceeding. _(✅ verified: type-only import of `./models`, whose own
+      `./shared/icons` import is also type-only and resolves to `lucide` — zero `@angular`
+      imports in the whole chain; runtime import graph of seed-data.ts is empty.)_
+- [x] **1b.2** **Test-first (RED):** write `src/server/data/seed.int.spec.ts` asserting, on a
       fresh temp DB after seeding: 3 events, 14 guests all on `ev-001`, companion rows from
       `party`, 14 photos with `authorName` (no FK failures), `User` + `EventAssignment` rows
       for each event's admin/security, and `SystemSetting['seed:origin']` present **and equal
       to the provider string in `schema.prisma`**. _Traces: BR-16 → spec req 14; BR-18 →
-      spec req 16._
-- [ ] **1b.3** Implement `prisma/seed.ts`: import `GUESTS`, `PHOTOS`, `EVENTS`, `USERS` from
+      spec req 16._ _(✅ RED captured: vitest failed on the unresolved `prisma/seed` import;
+      GREEN: 8/8 int — 7 seed tests + the health smoke.)_
+- [x] **1b.3** Implement `prisma/seed.ts`: import `GUESTS`, `PHOTOS`, `EVENTS`, `USERS` from
       `src/app/core/seed-data.ts` (import, never duplicate literals); deterministic explicit
       IDs (`ev-001`, `g-001`…, `ph-001`…); mappings per design §9 (guests → `ev-001`;
       `party` → `Companion`; `PaseEvent.admin`/`security` → `User` + `EventAssignment`;
       `photo.author` → `authorName`; drop `dateLabel`; do NOT persist the `guests: 218`
       display counter); stamp `SystemSetting { key: 'seed:origin', value: <active provider> }`
-      read from the datasource provider at seed time (BR-18).
-- [ ] **1b.4** Wire `package.json`: `"prisma": { "seed": "tsx prisma/seed.ts" }`; verify
+      read from the datasource provider at seed time (BR-18). _(✅ Also: `usr-001`… for the
+      13 deduped role holders, `c-001`… for companions; client `done` → server `finished`
+      status per spec req 11; `start`/`end` derived from `dateLabel` (UTC) with an 8h demo
+      duration — see apply-progress §1b for the recorded decisions.)_
+- [x] **1b.4** Wire `package.json`: `"prisma": { "seed": "tsx prisma/seed.ts" }`; verify
       `npm run db:reset && npm run db:seed` is idempotent (run twice) and that `*.db` stays
-      untracked (`git status`).
-- [ ] **1b.5** Run the PR verification gate (ground rule 2).
+      untracked (`git status`). _(✅ Deviation per 1a note 5: Prisma 7 reads the seed command
+      from `prisma7.config.ts` `migrations.seed`, not the package.json `prisma.seed` key —
+      wired there; `db:seed` run twice on dev.db → identical counts 3/14/19/14/13/12,
+      marker `sqlite`; `git status` shows no `*.db`.)_
+- [x] **1b.5** Run the PR verification gate (ground rule 2). _(✅ unit 73/73; int 8/8;
+      `tsc --noEmit -p tsconfig.app.json` + `-p tsconfig.spec.json` exit 0; `ng build` exit 0,
+      prerender 1 route; prettier clean on all 1b files; smoke `GET /api/health` → 200.)_
 
 **Suggested work-unit commits:**
 
@@ -593,7 +604,7 @@ All 16 are traced above. Flag if a requirement was expected to be authored but i
 | --- | ----------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Chain strategy (stacked-to-main vs feature-branch chain + tracker)      | first PR creation                         | ⚠️ user decision under `ask-always`; plan assumes stacked-to-main                                                                                                                |
 | 2   | Dev `/api/*` passthrough failure → standalone API + proxyConfig (1a.12) | PR-1a                                     | ✅ **RESOLVED** — user approved option a (standalone API process + `/api` proxy, port 3000); smoke green direct + via `ng serve` (see 1a.12 + apply-progress §1a.12-remediation) |
-| 3   | `seed-data.ts` Angular import found (1b.1)                              | PR-1b                                     | ⚠️ escalate if detected                                                                                                                                                          |
+| 3   | `seed-data.ts` Angular import found (1b.1)                              | PR-1b                                     | ✅ **CHECKED (1b.1)** — zero Angular imports in the type-only chain; no escalation                                                                                               |
 | 4   | `size:exception`                                                        | 1a / 2a / 3b only if sub-split infeasible | pre-approved fallback — NOT consumed by this plan                                                                                                                                |
 | 5   | Spec requirement count 16 vs 17 stated                                  | now                                       | ⚠️ non-blocking, see traceability note                                                                                                                                           |
 | 6   | Postgres switch execution                                               | after this change                         | 🚧 out of scope (non-goal)                                                                                                                                                       |

@@ -1,7 +1,9 @@
-# Apply progress: persistence-prisma-sqlite — PR-1a
+# Apply progress: persistence-prisma-sqlite — PR-1a + PR-1b
 
-Phase: `sdd-apply`. Scope: PR-1a ONLY (tasks 1a.1–1a.13). Strict TDD active.
-Chain position: `📍 1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → 4` (stacked-to-main, 9 PRs).
+Phase: `sdd-apply`. Scope: PR-1a (tasks 1a.1–1a.13, DONE through commit `76779ed`) and the
+PR-1b continuation batch (tasks 1b.1–1b.5, UNCOMMITTED — orchestrator owns commits). Strict
+TDD active in both.
+Chain position: `1a ✅ → 📍 1b (work done, tree dirty) → 1c → 1d → 2a → 2b → 3a → 3b → 4`.
 
 ## Status
 
@@ -206,6 +208,129 @@ at PR-creation time.
 
 ## Next steps (after 1a lands)
 
-- PR-1b: seed from `src/app/core/seed-data.ts` (1b.1 gate: verify no Angular imports).
-  Remember: Prisma 7 seeds via `migrations.seed` in `prisma7.config.ts`, not package.json.
+- ~~PR-1b: seed from `src/app/core/seed-data.ts` (1b.1 gate: verify no Angular imports).~~
+  → **DONE, see §PR-1b below** (uncommitted, orchestrator owns the commit).
 - PR-1c: read-only GETs + `CallerContext` + authz skeleton on top of the proven harness.
+  See the 1c/3a handoff notes at the end of §PR-1b (status mapping + sizeKb/1000 conventions).
+
+---
+
+# PR-1b — Seed from `seed-data.ts` + provider marker (tasks 1b.1–1b.5)
+
+Continuation batch executed under strict TDD. Working tree carries ONLY the 1b footprint
+(6 paths: 3 new + 3 modified), nothing staged/committed (HEAD `76779ed`).
+
+## Status
+
+| Task                                     | Status                         | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1b.1 seed-data purity gate               | ✅                             | Type-only import of `./models`; `models.ts` type-only imports `./shared/icons`, which resolves to `lucide` — `grep -c '@angular'` → **0** across the whole chain; runtime import graph of `seed-data.ts` is EMPTY (esbuild erases `import type`)                                                                                                                                                                                                                              |
+| 1b.2 seed integration spec **RED→GREEN** | ✅                             | **RED (observed in-session, not replayable post-GREEN):** `npm run test:int` failed with unresolved import of `../../../prisma/seed` (1 file failed; health smoke stayed green). **GREEN after 1b.3:** **8 passed (8)** — 7 seed tests + health smoke. The spec is hermetic: it side-effect-imports `src/server/testing/integration-harness.ts` (per-file temp SQLite + `prisma migrate deploy` + FK-safe reset), so it never reads or writes the local `dev.db` (design §8). |
+| 1b.3 `prisma/seed.ts`                    | ✅                             | Imports `GUESTS`/`PHOTOS`/`EVENTS`/`USERS` (never literals); deterministic IDs `ev-/g-/ph-/usr-/c-001…`; all mappings per design §9; provider marker read from `schema.prisma` at seed time inside one idempotent `$transaction`                                                                                                                                                                                                                                              |
+| 1b.4 seed command wiring                 | ✅ **with recorded deviation** | `prisma7.config.ts` `migrations.seed: 'tsx prisma/seed.ts'` (Prisma 7 — NOT the package.json `prisma.seed` key; see deviation 7.4). `npm run db:seed` run **twice** on `dev.db` → identical counts `3/14/19/14/13/12` (events/guests/companions/photos/users/assignments), marker `sqlite`; `git status` shows no `*.db`                                                                                                                                                      |
+| 1b.5 PR verification gate                | ✅                             | See gate table below                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
+## Strict TDD evidence
+
+| Step                    | Action                                                                                     | Result                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Baseline                | `npm run test:int`                                                                         | 1/1 green (health smoke)                                    |
+| **RED**                 | added `src/server/data/seed.int.spec.ts` (asserts the full seed contract, imports seed fn) | 1 file failed — `Cannot find module '../../../prisma/seed'` |
+| **GREEN**               | added `prisma/seed.ts` + `prisma7.config.ts` seed wiring                                   | 8/8 int green; both `tsc` projects exit 0                   |
+| CLI verification (1b.4) | `npm run db:seed` × 2 on real `dev.db`                                                     | both runs exit 0; row counts identical → idempotent         |
+
+**RED reproducibility caveat:** the RED state was observed _before_ `prisma/seed.ts` existed,
+so it cannot be replayed once GREEN makes the import resolvable. The evidence above is the
+in-session failing module-resolution run; no post-hoc RED demo is claimed.
+
+## Verification gates (actual output)
+
+| Gate                                                                                                 | Result                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx ng test --watch=false`                                                                          | **73 passed (73)**, 4 files — unchanged baseline                                                                                                                                                               |
+| `npm run test:int`                                                                                   | **8 passed (8)** (1 pre-existing + 7 new seed tests)                                                                                                                                                           |
+| `npm run db:seed` (wired) ×2                                                                         | both exit 0, "Seed complete" both times; `dev.db` counts after two runs: 3 events, 14 guests, 19 companions, 14 photos, 13 users, 12 assignments, `seed:origin='sqlite'`                                       |
+| `npx tsc --noEmit -p tsconfig.app.json`                                                              | exit 0                                                                                                                                                                                                         |
+| `npx tsc --noEmit -p tsconfig.spec.json` (extra)                                                     | exit 0 — this is the project that actually type-checks `seed.int.spec.ts` + `prisma/seed.ts`                                                                                                                   |
+| `npx ng build`                                                                                       | exit 0, prerender 1 static route, no NG05xx                                                                                                                                                                    |
+| `npx prettier --check` on 1b files                                                                   | all clean (`prisma/seed.ts`, `prisma/package.json`, `seed.int.spec.ts`, `prisma7.config.ts`, `tasks.md`, `apply-progress.md`)                                                                                  |
+| **Hermeticity:** `md5sum dev.db` before/after `npm run test:int`                                     | **identical** (`6c2d5f404b23fe6a79427ed9727180ff` both times) — the suite no longer mutates the developer DB                                                                                                   |
+| **Fresh-clone-like int run:** `DATABASE_URL=file:/tmp/opencode/fresh-seed-check.db npm run test:int` | **8 passed (8)**, 2 files — no pre-existing tables; the harness provisions its own migrated temp DB (the supplied path is never created)                                                                       |
+| Smoke: `npm run api:start` + `curl /api/health`                                                      | **200** `{"status":"ok","provider":"sqlite"}` (seeded DB); process killed, port 3000 closed, no strays                                                                                                         |
+| `git status`                                                                                         | **6 paths** (3 new + 3 modified): `prisma/seed.ts`, `prisma/package.json`, `src/server/data/seed.int.spec.ts` (new); `prisma7.config.ts`, `tasks.md`, `apply-progress.md` (modified); nothing staged/committed |
+
+## Recorded decisions & deviations (PR-1b)
+
+1. **Event `status`: client `done` → server `finished`.** Spec req 11 / BR-12 gate on
+   `status=finished` and the schema comment says `upcoming | active | finished`, but the
+   client domain union (`models.ts EventStatus`) says `done`. The DB stores the SERVER
+   vocabulary (`done` mapped to `finished`; `active`/`upcoming` pass through). PR-1c's
+   repository MUST map `finished → done` at the Prisma→domain boundary (documented in
+   "1c/3a handoff notes" below).
+2. **Event `start`/`end` are DERIVED from `dateLabel`** (`'14 JUN 2025 · 20:00'` parsed as
+   UTC; month table covers EN/ES abbreviations). `end = start + 8h` via an explicit
+   `DEMO_EVENT_DURATION_MS` constant — the prototype has no duration concept; `end` only
+   drives the QR validity window (BR-09) at demo scale. `dateLabel` itself is dropped per
+   design §9 (client reformats from start/end later).
+3. **`Photo.sizeKb` is DECIMAL KB.** Domain `size` is MB (UI renders `${size} MB`), so the
+   seed stores `Math.round(size * 1000)` (3.2 MB → 3200 KB) — lossless round-trip.
+   **PR-1c repositories MUST divide by 1000** (not 1024) to recover `size`.
+4. **Seed wiring lives in `prisma7.config.ts` `migrations.seed`** — confirmed against the
+   installed `@prisma/config` types: Prisma 7 reads the seed command from the config file,
+   not the package.json `prisma.seed` key assumed by task 1b.4 (this was already flagged as
+   1a deviation 5; `npm run db:seed` proves it end to end).
+5. **`prisma/package.json` (`{"type":"module"}`) ESM marker.** The repo root has no
+   `"type": "module"`, so `tsx` compiled `seed.ts` to CJS → `Top-level await is currently
+not supported` + empty `import.meta` (first CLI attempt FAILED, captured). The marker
+   scopes ESM to `prisma/` without renaming the task-specified `seed.ts`; the Prisma CLI
+   ignores it.
+6. **Idempotency = delete-then-insert in one `$transaction`, scoped to the deterministic
+   seed IDs.** Re-running the seed replays the exact snapshot: rows under seeded event IDs
+   are replaced (cascade wipes their guests/companions/photos/assignments) and only the 13
+   seeded users are deleted/recreated (never non-seed users). Consequence (accepted,
+   matches seed-data's "replays this exact snapshot" semantics): manual edits to SEEDED
+   rows are lost on re-seed; `systemSetting['seed:origin']` is upserted.
+7. **User mapping:** 13 users = 1 provider (`USERS.provider`) + 3 admins + 9 security,
+   deduplicated BY NAME (`USERS.admin` ≡ ev1 admin Mariana Solórzano → one row); 12
+   `EventAssignment` rows (provider is unassigned — sees everything in 1c). Guard
+   `post/app/last` and `ini` are display fields with no schema columns — dropped.
+   Deterministic IDs: `usr-001…`; companions `c-001…` (flat sequence, guest order).
+8. **`Photo.authorGuestId` stays NULL** (design §3/§9): author names don't reliably match
+   guest records — no FK failures by construction; `authorName` carries the display name.
+
+## 1c / 3a handoff notes (conventions fixed by this batch — keep consistent)
+
+- Repository status map: DB `finished` → domain `done`; `active`/`upcoming` unchanged.
+- Repository `sizeKb → size`: divide by **1000**.
+- Repository `Photo.time` → display `HH:mm` (stored as UTC datetime on the event day).
+- Repository `Event.dateLabel`: synthesize from `start` (client expects the field; it is
+  not stored).
+- Seeded provider user exists (role `provider`) — usable as trusted `x-user-id` context in
+  1c authz tests.
+- **Re-seed FK footgun (owner: PR-3a):** `prisma/seed.ts` deletes only the 13 deterministic
+  seed user IDs, which is safe only while the seed is the sole writer. `schema.prisma` states
+  "User rows are NEVER deleted", and PR-3a's `AdminRequest.requestedBy` (`onDelete: Restrict`)
+  can reference users. Once non-seed rows exist, re-running the seed will fail on that FK.
+  PR-3a must pick and document a resolution: guard/refuse re-seeding, switch to upserts, or
+  transactionally delete dependent rows first. Do not silently weaken `onDelete: Restrict`.
+
+## Known limitation (PR-1b, documented — not fixed here)
+
+`seedDatabase()` uses `user.deleteMany({ where: { id: { in: <seed ids> } } })` (see the code
+comment in `prisma/seed.ts`). Re-seeding is safe today because the seed is the only data
+source and nothing references those users. It will stop being safe when PR-3a+ persists rows
+that reference users with a restrictive FK (e.g. `AdminRequest.requestedBy`). Resolution is
+deliberately deferred to that slice — see the 1c/3a handoff note above.
+
+## Files touched (PR-1b, uncommitted)
+
+- **New:** `prisma/seed.ts` (~144 code lines), `src/server/data/seed.int.spec.ts`
+  (~124), `prisma/package.json` (4)
+- **Modified:** `prisma7.config.ts` (+2: `migrations.seed`), `tasks.md` (1b checkboxes),
+  this file
+- **Total:** 6 paths (3 new + 3 modified), matching `git status` exactly.
+- **Untouched:** `src/app/**` (incl. `seed-data.ts` — shape preserved per ground rule),
+  all 1a artifacts, all pre-existing dirty files
+- **Code-line count vs 400 budget:** ≈ **270** code lines excl. comments/blank — inside
+  budget (estimate band was 170–250; the month map + deterministic-ID plumbing explain the
+  overshoot). Low risk, as forecast.
