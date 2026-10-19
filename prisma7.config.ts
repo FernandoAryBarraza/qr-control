@@ -14,7 +14,9 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
-    // Seed wiring (`seed: 'tsx prisma/seed.ts'`) lands in PR-1b together with prisma/seed.ts.
+    // Prisma 7 reads the seed command from this config file — NOT from the
+    // package.json `prisma.seed` key the older task text assumed (1a deviation 5).
+    seed: 'tsx prisma/seed.ts',
   },
   datasource: {
     // env() throws when DATABASE_URL is unset, which would make the postinstall
