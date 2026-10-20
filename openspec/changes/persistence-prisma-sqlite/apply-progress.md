@@ -1,10 +1,11 @@
-# Apply progress: persistence-prisma-sqlite — PR-1a + PR-1b + PR-1c
+# Apply progress: persistence-prisma-sqlite — PR-1a + PR-1b + PR-1c + PR-1d
 
 Phase: `sdd-apply`. Scope: PR-1a (tasks 1a.1–1a.13, DONE through commit `76779ed`), the
-PR-1b continuation batch (tasks 1b.1–1b.5, DONE through commit `e5e08f4`), and the PR-1c
-continuation batch (tasks 1c.1–1c.7, UNCOMMITTED — orchestrator owns commits). Strict TDD
-active in all three.
-Chain position: `1a ✅ → 1b ✅ → 📍 1c (work done, tree dirty) → 1d → 2a → 2b → 3a → 3b → 4`.
+PR-1b continuation batch (tasks 1b.1–1b.5, DONE through commit `e5e08f4`), the PR-1c
+continuation batch (tasks 1c.1–1c.7, DONE through commits `8186f1d` + `dc05380`), and the
+PR-1d continuation batch (tasks 1d.1–1d.7, WORK DONE UNCOMMITTED — orchestrator owns
+commits; HEAD `dc05380`). Strict TDD active in all four.
+Chain position: `1a ✅ → 1b ✅ → 1c ✅ → 📍 1d (work done, tree dirty) → 2a → 2b → 3a → 3b → 4`.
 
 ## Status
 
@@ -468,3 +469,146 @@ cross-event assertions use strict payload equality, so a 403 response is exactly
   `tasks.md` (1c checkboxes), this file
 - **Total:** 13 paths (10 new + 3 modified), matching `git status --porcelain`.
 - **Untouched:** `src/app/**`, `prisma/**`, `.env`, `dev.db`, all pre-existing dirty paths
+
+---
+
+# PR-1d — Hydration-safe client read path (tasks 1d.1–1d.7)
+
+Continuation batch executed under strict TDD. Working tree carries the 1d footprint plus
+pre-existing dirt (1a–1c artifacts already committed at `dc05380`; parallel-session files
+untouched — see Files touched). Nothing staged/committed; orchestrator owns commits.
+
+## Status
+
+| Task                                          | Status | Verification                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1d.1 RED `data-api.service.spec.ts`           | ✅     | 4 cases written first (typed GETs for events/guests/photos, `x-user-id` trusted header, error propagation). RED: `ng test --include='**/data-api.service.spec.ts'` → **EXIT 1**, `Could not resolve "./data-api.service"` + `TS2307`                                                                                                                                              |
+| 1d.2 `data-api.service.ts`                    | ✅     | `providedIn: 'root'`, HttpClient only (`firstValueFrom`), relative `/api/*` URLs, `encodeURIComponent` on `:id`, header from `TRUSTED_USER_ID = 'usr-001'` constant. GREEN: filtered run **4 passed (4)**, `tsc -p tsconfig.app.json` exit 0                                                                                                                                       |
+| 1d.3 RED `pase-store.spec.ts`                 | ✅     | 4 cases written first (seed loading initial state + zero requests at construction; `load()` populates 3 signals + rebuilds `passPool` from persisted guest IDs; counters stay `computed()`; API rejection → seed fallback + toast). RED: **EXIT 1**, `TS2339: Property 'load'/'loading' does not exist on type 'PaseStore'`                                                     |
+| 1d.4 `PaseStore.load()` + root wiring         | ✅     | `loading = signal(true)` + `async load()` in `pase-store.ts`; `App` wires `afterNextRender` + `isPlatformBrowser` (FeedService/clock pattern); `provideHttpClient` in `app.config.ts`; `provideHttpClientTesting` added to `app.spec.ts`. GREEN: filtered **4 passed (4)**; full `test:unit` → **81 passed (81)** (73 baseline + 8 new); `tsc` app + spec exit 0                  |
+| 1d.5 Hydration acceptance                     | ✅     | `ng build` with `DATABASE_URL=file:/tmp/…nonexistent.db` → exit 0, "Prerendered 1 static route", **no DB file ever created**; served HTML carries `ng-server-context="ssg"`; phased headless-Chromium run → **HYDRATION ACCEPTANCE: PASSED** (evidence below)                                                                                                                     |
+| 1d.6 Bundle guard                             | ✅     | `grep -ril '@prisma\|query.engine\|query_compiler\|better-sqlite3\|PrismaClient' dist/qr_control/browser/` → **0 matches** (checked after both builds)                                                                                                                                                                                                                          |
+| 1d.7 PR verification gate                     | ✅     | All gates green — see table below                                                                                                                                                                                                                                                                                                                                               |
+
+## Strict TDD evidence (RED → GREEN)
+
+| Step               | Action (test first)                                                                                                                                                                        | Result                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| 1. Baseline        | `npm run test:unit` before any change                                                                                                                                                      | **73 passed (73)**, 4 files                                                                                  |
+| 2. **1d.1 RED**    | `src/app/core/api/data-api.service.spec.ts` (4 cases; module does not exist yet)                                                                                                            | `ng test --include=…` → **EXIT 1**: `Could not resolve "./data-api.service"` / `TS2307`                       |
+| 3. **1d.2 GREEN**  | minimal `data-api.service.ts` (typed GETs + trusted header, no Prisma import path from `src/app/**`)                                                                                       | filtered run → **4 passed (4)**; `tsc --noEmit -p tsconfig.app.json` → exit 0                                 |
+| 4. **1d.3 RED**    | `src/app/core/pase-store.spec.ts` (4 cases; `load()`/`loading` do not exist yet)                                                                                                            | **EXIT 1**: `TS2339: Property 'load' does not exist on type 'PaseStore'` (same for `loading`)                 |
+| 5. **1d.4 GREEN**  | `PaseStore.load()` + `loading` signal + `DataApiService` injection; `App` `afterNextRender`/`isPlatformBrowser` wiring; `provideHttpClient` in config; `provideHttpClientTesting` in `app.spec` | filtered **4 passed (4)** → full `test:unit` **81 passed (81)**, 6 files; `tsc` app + spec → exit 0            |
+
+## 1d.5 hydration acceptance — actual evidence
+
+Serving (zero source/config changes): the prod bundle constructs its request handler **without**
+passing `angular.json` security config (`new hn` with no argument → `allowedHosts ?? NG_ALLOWED_HOSTS`
+env fallback), so `security.allowedHosts: []` (pre-existing, recorded out-of-scope since 1a) is
+bypassed with `NG_ALLOWED_HOSTS=localhost,127.0.0.1`. An edge proxy (Node, `/tmp/opencode/edge.mjs`)
+simulates the deployment layer (deviation A1): `/api/* → 127.0.0.1:3000` (standalone API), everything
+else → SSR `:4100`.
+
+Phased headless-Chromium run (`/tmp/opencode/hydration-check.mjs`, API gated via `page.route`):
+
+| Phase                                                     | Result                                                                                                                                                                          |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A: prerendered load → hydration → fetch fired (gated)     | **zero NG0500/NG0502 — zero console errors of any kind**                                                                                                                         |
+| B: role switch to provider while gated                    | provider KPI row shows the **seeded** snapshot (`DE 130 GB CONTRATADOS · 40% EN USO`); 1 console error attributed to the probe window — see decision 5 below                     |
+| C: API released → store flip                               | KPI row flips to the **persisted** payload (`DE 0 GB CONTRATADOS`), **zero new console errors**; `GET /api/events` with `x-user-id: usr-001` + 3 guests + 3 photos = **7 requests** |
+
+Additional no-DB-at-prerender proof: build ran with `DATABASE_URL` pointed at a nonexistent path —
+success + no DB file created (prerender touches no database by construction; store renders the
+bundled seed snapshot).
+
+## Verification gates (actual output, 1d.7)
+
+| Command                                                         | Result                                                                                                               |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `npm run test:unit`                                             | **81 passed (81)**, 6 files (73 baseline + 8 new: 4 service + 4 store)                                               |
+| `npm run test:int`                                              | **30 passed (30)**, 6 files (1c suite untouched and green)                                                           |
+| `npx tsc --noEmit -p tsconfig.app.json`                         | exit 0                                                                                                               |
+| `npx tsc --noEmit -p tsconfig.spec.json`                        | exit 0                                                                                                               |
+| `npx prettier --check` on all 7 touched code paths              | clean (3 files reformatted with `--write in-cycle; `openspec/*.md` excluded per 1a precedent)                         |
+| `npx ng build`                                                  | exit 0 — "Prerendered 1 static route", final rebuild after formatting                                                |
+| Bundle guard (`dist/qr_control/browser`)                        | **0 matches** for `@prisma`/query-engine/`query_compiler`/`better-sqlite3`/`PrismaClient`                             |
+| Hydration acceptance (headless Chromium, phased)                | **PASSED** (table above)                                                                                             |
+
+## Recorded decisions & deviations (PR-1d)
+
+1. **Initial store state = bundled seed snapshot + `loading = true` flag** (not empty arrays).
+   This reconciles design §4 ("the store starts in a `loading` state on both server and client")
+   with the PR-1d header's explicit out-of-scope "seed-data runtime decoupling (PR-4)" and task
+   4.7 ("remove the store's seed initialization remnants **now that `PaseStore.load()` owns
+   state**" — i.e., remnants survive 1d). Hydration identity comes from the bundled constants:
+   server and client construct byte-identical state and issue zero requests at construction
+   (asserted). `load()` then overwrites `guests/photos/events/passPool`; PR-4 removes the seed
+   init, at which point the fallback becomes an empty store. Rollback boundary in tasks.md
+   ("store returns to seed-initialized signals") confirms this reading.
+2. **Trusted caller: `x-user-id: usr-001`** — a `TRUSTED_USER_ID` constant inside
+   `DataApiService` (seeded provider user, per the 1c handoff; `prisma/seed.ts` assigns
+   `usr-001` to the first `ensureUser` = provider). Role is read from the `User` row server-side;
+   the extractor stays swappable by a future auth layer (design §2, "no auth in this change").
+3. **`load()` request shape: 1 + 2×N** (`GET /api/events` then per-event guests/photos — those
+   are the only read routes 1c exposes). At seed scale (3 events) = 7 requests; acceptable per
+   design's "data volume is trivial". Failure → seed fallback + warn toast, `loading` ends either
+   way so no UI guard can spin forever.
+4. **Storage KPI reads `NaN% EN USO` after load — known display-state gap, NOT fixed in 1d.**
+   The API synthesizes `used: 0/max: 0` (never persisted — `repositories/events.ts` comment),
+   `metrics.spec.ts` locks `NaN% EN USO` as "preserved prototype behaviour", and `seed.ts` states
+   display counters are "recomputed client-side later". Changing `kpis()` would violate the 4.7
+   "keep `metrics.spec.ts` intact" constraint and prototype parity. Owner: the later display-state
+   slice (with PR-2/4 work). Documented here so the manual acceptance is not re-litigated.
+5. **NG0203 discovered on role switch — pre-existing, deliberately NOT fixed in 1d.**
+   `src/app/core/feed.service.ts:48` calls `inject(DestroyRef)` **inside** the `afterNextRender`
+   callback; Angular v22 runs those callbacks outside the injection context (`@throws NG0203 when
+   called outside an injection context`, `@angular/core` core.d.ts) → one `ERROR … NG0203` the
+   first time the provider view constructs FeedService. Attribution: phase A (App's own
+   `afterNextRender` + boot) and phase C are error-free; only the role-switch window emits it,
+   and feed.service.ts is the **only** callback in `src/app/**` calling `inject()` mid-callback
+   (clock/metrics-section/stat-tile/modals all capture fields — the correct pattern). Fix =
+   hoist to a field like `clock.ts:38`. Not done here: `feed.service.ts` carries a parallel
+   session's prettier reflow (pre-existing dirty), and FeedService cleanup is outside 1d scope.
+   **Req 15 acceptance is unaffected: zero NG0500/NG0502, zero errors on the load path.**
+6. **Serving acceptance needed no file changes** — `NG_ALLOWED_HOSTS` env (see 1d.5 section) +
+   a throwaway edge proxy mimicking the deployment layer. `angular.json` remains untouched
+   (its only current diff is a foreign prettier reflow). Note for deployment recipes: with the
+   scaffold's `allowedHosts: []` the SSR process must be started with `NG_ALLOWED_HOSTS` set,
+   or the key must be given a real value at the deployment layer.
+
+## PR-2a handoff notes (from PR-1d)
+
+- **Browser specs need HTTP test providers.** `PaseStore` now injects `DataApiService` → any
+  TestBed that constructs it (today only `app.spec.ts`) needs `provideHttpClient()` +
+  `provideHttpClientTesting()`.
+- **NG0203 fix candidate** (decision 5): `feed.service.ts` line 48 → field-injected `destroyRef`.
+  Small, but belongs to whoever owns that file's pending prettier diff — recommend bundling it
+  into the next client-facing batch rather than 1d.
+- **Storage/`used`/`max` display state** (decision 4): when a slice starts persisting or
+  recomputing these, `kpis()` NaN behavior and `metrics.spec.ts:460` must change together.
+- **After PR-4 removes seed init:** `load()`'s error fallback becomes an empty store — revisit
+  whether an empty-state UI (loading/empty guards) is required then; `loading` signal already
+  exists for it.
+- **Client role stays demo-only:** `store.role()` never reaches the API (always `usr-001`); a
+  real auth layer is out of this change's scope by design §2.
+
+## Code-line count vs 400 budget (code only, excl. comments/blank)
+
+- New: `data-api.service.ts` **29**, `data-api.service.spec.ts` **84**, `pase-store.spec.ts` **133**
+- Modified (added lines): **38** across `pase-store.ts` / `app.ts` / `app.config.ts` / `app.spec.ts`
+- **Total: 284 — inside the 400 review budget** (estimate band 210–300; fixtures in the two specs
+  explain landing at the top of the band). Risk: Low, as forecast.
+
+## Files touched (PR-1d, uncommitted)
+
+- **New:** `src/app/core/api/data-api.service.ts` (29 code), `src/app/core/api/data-api.service.spec.ts`
+  (84), `src/app/core/pase-store.spec.ts` (133)
+- **Modified:** `src/app/core/pase-store.ts` (+`loading`, +`load()`), `src/app/app.ts`
+  (`afterNextRender` wiring), `src/app/app.config.ts` (`provideHttpClient`), `src/app/app.spec.ts`
+  (HTTP test providers), `tasks.md` (1d.1–1d.7 ticks), this file
+- **Total:** 9 paths (3 new + 6 modified)
+- **Untouched:** `seed-data.ts`, `metrics.ts` + `metrics.spec.ts` (NaN parity preserved),
+  `app.routes.server.ts` (`Prerender` intact), `src/server/**`, `prisma/**`, `angular.json`,
+  and every pre-existing dirty path (incl. the parallel session's files: `event-hero.ts`,
+  `guest-detail.ts`, `metrics-section.ts`, `stat-tile.ts`, `photo-cloud.ts`, `topbar.css`,
+  `qr-ticket-modal.ts`, `styles.css`, the prettier-reflow set, `package.json` prior content)

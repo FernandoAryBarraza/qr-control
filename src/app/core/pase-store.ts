@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
+import { DataApiService } from './api/data-api.service';
 import {
   computeMetrics,
   eventFilters,
@@ -33,23 +34,33 @@ function toggleIn(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
 }
 
 /**
- * Single source of truth for both the seed data and the UI state.
+ * Single source of truth for the UI state.
  *
  * Every record is treated as immutable: a mutation replaces the object
  * and the array (`update`, never `mutate`), which is what lets `guests`,
  * `photos` and `events` be shared with the derived `computed()`s without
- * surprises. There is no persistence — the prototype has none either, so
- * a reload replays the seed snapshot exactly.
+ * surprises.
+ *
+ * Hydration-safe read path (design §4 / spec req 15): the store starts from
+ * the bundled seed snapshot in a `loading` state — identical on server and
+ * client, so the prerendered HTML hydrates without mismatch — and `load()`
+ * (browser-only, `afterNextRender`) overwrites the data signals with the
+ * persisted snapshot fetched over HTTP. Mutations stay in-memory until PR-2
+ * wires them as optimistic API calls (design §7).
  */
 @Injectable({ providedIn: 'root' })
 export class PaseStore {
   protected readonly toast = inject(ToastService);
+  private readonly api = inject(DataApiService);
 
   /* ---------- Datos ---------- */
   readonly guests = signal<readonly Guest[]>(GUESTS);
   readonly photos = signal<readonly EventPhoto[]>(PHOTOS);
   readonly events = signal<readonly PaseEvent[]>(EVENTS);
   readonly passPool = signal<readonly Pass[]>(passPoolOf(GUESTS));
+
+  /** True while the initial post-hydration fetch has not settled yet (design §4). */
+  readonly loading = signal(true);
 
   /* ---------- Estado de interfaz ---------- */
   readonly role = signal<Role>('admin');
@@ -128,6 +139,40 @@ export class PaseStore {
 
   toggleEvent(id: string): void {
     this.expandedEvents.update((set) => toggleIn(set, id));
+  }
+
+  /* ---------- Carga inicial (post-hidratación) ---------- */
+  /**
+   * Fetches the persisted snapshot (`GET /api/events` + per-event guests and
+   * photos) and writes it into the signals. Called from `afterNextRender` in
+   * the root component, so the Node render and the first client render only
+   * ever see the bundled state above — no hydration divergence is possible.
+   *
+   * On failure the seed snapshot stays in place (graceful degradation) and a
+   * toast surfaces the error; either way the loading state ends, so UI guards
+   * can never spin forever. `passPool` is rebuilt from the persisted guest IDs
+   * so feed/QR codes cannot point at records the server does not know.
+   */
+  async load(): Promise<void> {
+    try {
+      const events = await this.api.listEvents();
+      const [guestLists, photoLists] = await Promise.all([
+        Promise.all(events.map((event) => this.api.listGuests(event.id))),
+        Promise.all(events.map((event) => this.api.listPhotos(event.id))),
+      ]);
+
+      const guests = guestLists.flat();
+      const photos = photoLists.flat();
+
+      this.events.set(events);
+      this.guests.set(guests);
+      this.photos.set(photos);
+      this.passPool.set(passPoolOf(guests));
+      this.loading.set(false);
+    } catch {
+      this.loading.set(false);
+      this.toast.push('No se pudo cargar la información del servidor', 'warn', 'circleSlash');
+    }
   }
 
   /* ---------- Mutaciones ---------- */

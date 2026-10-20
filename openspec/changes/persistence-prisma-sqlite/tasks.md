@@ -317,27 +317,27 @@ server API remains (additive).
 
 Dependency position: `1a → 1b → 1c → 📍 1d → 2a → 2b → 3a → 3b → 4`
 
-- [ ] **1d.1** **Test-first (RED):** write `src/app/core/api/data-api.service.spec.ts` with
+- [x] **1d.1** **Test-first (RED):** write `src/app/core/api/data-api.service.spec.ts` with
       `provideHttpClientTesting` — typed GETs for events/guests/photos endpoints, mapping
       JSON → domain interfaces, error propagation. _Traces: spec req 15 (client fetch
       surface)._
-- [ ] **1d.2** Implement `src/app/core/api/data-api.service.ts` (`providedIn: 'root'`,
+- [x] **1d.2** Implement `src/app/core/api/data-api.service.ts` (`providedIn: 'root'`,
       HttpClient only — no Prisma import possible from `src/app/**`). 🚧 after 1d.1.
-- [ ] **1d.3** **Test-first (RED):** write `pase-store.load()` specs — initial state identical
+- [x] **1d.3** **Test-first (RED):** write `pase-store.load()` specs — initial state identical
       on server and client (loading state, design §4), `load()` populates
       `guests/photos/events` signals from the API payload, counters stay `computed()`.
       _Traces: BR-03 client side-effect-free read; spec req 15 (scenario 1)._
-- [ ] **1d.4** Implement `PaseStore.load()` and wire it from the root component with
+- [x] **1d.4** Implement `PaseStore.load()` and wire it from the root component with
       `afterNextRender` + `isPlatformBrowser` (the `FeedService` pattern) in
       `src/app/app.ts`; keep `app.routes.server.ts` on `Prerender` untouched.
       Mutations remain in-memory (design §7). 🚧 after 1d.2–1d.3.
-- [ ] **1d.5** **Hydration acceptance (manual + build):** `ng build` (prerender + SSR), start
+- [x] **1d.5** **Hydration acceptance (manual + build):** `ng build` (prerender + SSR), start
       `node dist/.../server.mjs`, load `/` and confirm **zero NG0500/NG0502** and that
       prerender performed no DB access; confirm data appears after hydration.
       _Traces: spec req 15 (scenarios 1–2); proposal success criterion._
-- [ ] **1d.6** Bundle guard quick check: grep `dist/browser` for `@prisma`/query-engine →
+- [x] **1d.6** Bundle guard quick check: grep `dist/browser` for `@prisma`/query-engine →
       zero. _Traces: spec req 15 (scenario 3)._
-- [ ] **1d.7** Run the PR verification gate (ground rule 2).
+- [x] **1d.7** Run the PR verification gate (ground rule 2).
 
 **Suggested work-unit commits:**
 
