@@ -637,12 +637,12 @@ the repo-wide formatting backlog that had been blocking safe staging for the who
 
 ## Status
 
-| Item                                         | Status | Verification                                                                                                                                               |
-| -------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Decision 5 — NG0203 in `feed.service.ts`     | ✅     | commit `aea3969`; new `feed.service.spec.ts` (RED: `expected [ -203 ] to deeply equal []` → GREEN 3/3)                                                     |
-| Decision 4 — storage KPI `NaN% EN USO`       | ✅     | commit `be37243`; display mock `src/app/core/storage-display.ts`; the API omits `used`/`max`/`br`; KPI reads `51.4GB / DE 130 GB CONTRATADOS · 40% EN USO` |
-| NG0600 — the storage plan modal never opened | ✅     | commit `be37243`, spec `568f640`; the modal wrote a signal during render, so Angular aborted the render (the overlay was empty)                            |
-| Repo-wide prettier backlog (72 dirty paths)  | ✅     | commits `0098e7e`, `dabb360`, `73c272f`, `8361a80`; the tree is clean for the first time in the chain                                                      |
+| Item                                         | Status | Verification                                                                                                                                             |
+| -------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decision 5 — NG0203 in `feed.service.ts`     | ✅     | commit `aea3969`; new `feed.service.spec.ts` (RED: `expected [ -203 ] to deeply equal []` → GREEN 3/3)                                                   |
+| Decision 4 — storage KPI `NaN% EN USO`       | ✅     | commit `be37243`; display mock `src/app/core/event-display.ts`; the API omits `used`/`max`/`br`; KPI reads `51.4GB / DE 130 GB CONTRATADOS · 40% EN USO` |
+| NG0600 — the storage plan modal never opened | ✅     | commit `be37243`, spec `568f640`; the modal wrote a signal during render, so Angular aborted the render (the overlay was empty)                          |
+| Repo-wide prettier backlog (72 dirty paths)  | ✅     | commits `0098e7e`, `dabb360`, `73c272f`, `8361a80`; the tree is clean for the first time in the chain                                                    |
 
 ## Decisions 4 and 5 — resolved
 
@@ -661,7 +661,7 @@ never had an empty-list path.
 Resolution (user decision): the storage counters are a **client-side display mock**, because
 the storage service does not exist yet (BR-16 keeps image bytes on an external vendor) and
 design §3 already decided counters are not stored. The API now omits `used`/`max`/`br`
-entirely; `src/app/core/storage-display.ts` holds the prototype's per-event figures and
+entirely; `src/app/core/event-display.ts` holds the prototype's per-event figures and
 resolves them client-side; an event without a fixture renders an honest `—` instead of NaN.
 No schema change and no migration — PR-2a's scope is untouched.
 
@@ -678,7 +678,7 @@ The mock is keyed by event id, and the client prototype ids (`ev1`) differ from 
 ids (`ev-001`, derived from the event order by `prisma/seed.ts` per design §3's "deterministic
 explicit IDs"). A `PERSISTED_IDS` alias binds them by position. If the seed's event **order**
 changes the alias silently mis-binds; if the id **scheme** changes the KPI goes blank. Both are
-now caught by tests (`storage-display.spec.ts` + `seed.int.spec.ts`). The systemic fix — one
+now caught by tests (`event-display.spec.ts` + `seed.int.spec.ts`). The systemic fix — one
 id space for the same records — is deferred.
 
 ## Strict TDD evidence
@@ -715,7 +715,7 @@ keeps the API's fake zeros.
 
 ## Files touched (display-state cleanup)
 
-- **New:** `src/app/core/storage-display.ts`, `src/app/core/storage-display.spec.ts`,
+- **New:** `src/app/core/event-display.ts`, `src/app/core/event-display.spec.ts`,
   `src/app/core/feed.service.spec.ts`, `src/app/shared/modal/storage-plan-modal.spec.ts`
 - **Modified:** `src/app/core/models.ts`, `src/app/core/metrics.ts` + spec,
   `src/app/core/seed-data.ts`, `src/app/core/pase-store.spec.ts`,
@@ -734,6 +734,105 @@ keeps the API's fake zeros.
   empty/null by the mapper. Same root cause as the storage counters, different fields. If 2a's
   event-creation contract is to display real admin contact data, those fields need the same
   client-side treatment — decide before writing 2a.3.
+  **→ RESOLVED in the third display-state batch (commits `5dc3f18` + `9da3749`).** The mapper
+  now omits all three, and the client resolves them from the display module. An event created
+  through `POST /api/events` therefore has no fixture: its contact lines, its guard details and
+  its badge render the honest em dash, which is the intended behaviour, not a gap to close in
+  2a.
 - **`storageOf()` requires both `used` and `max`.** Applying a storage plan to an event with no
   fixture sets `max` but the UI keeps showing `—` (a fixture-less event is skipped by the
   totals). Latent today: "Alta de evento" is still a stub toast.
+
+---
+
+# Display-state cleanup, third batch — the last three display families (DONE)
+
+The first batch closed the storage counters; this one closes the admin contact, the security-guard
+details and the countdown — the remaining prototype display fields the API used to fake.
+
+## Status
+
+| Item                                    | Status | Verification                                                                                                                     |
+| --------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Admin contact (`email`/`phone`/`since`) | ✅     | commit `5dc3f18`; the mapper returns `admin: { name }`; the contact modal no longer claims a message was sent to a blank address |
+| Guard details (`post`/`app`/`last`)     | ✅     | commit `5dc3f18`; the scanner KPI reads **3 of 9** (the prototype's value) instead of 0 of 9                                     |
+| Countdown (`cd`)                        | ✅     | commit `5dc3f18`; the `EN 42 DÍAS` badge renders on the upcoming event only                                                      |
+| Blank-string fallback hole              | ✅     | commit `5dc3f18`; a payload carrying `email: ''` no longer resurrects the empty address                                          |
+| DOM-level specs for the three families  | ✅     | commit `9da3749`                                                                                                                 |
+
+## The module
+
+`src/app/core/event-display.ts` **supersedes** `storage-display.ts` and is now the single owner of
+every prototype display fixture: the storage counters, the admin contact, the guard details and the
+countdown. (Git records this as a delete plus an add, not a rename: the similarity falls below
+git's default 50% rename threshold, so `git log --follow` will not connect the two.)
+
+**Resolution rule — per field:** the payload's own value wins, the fixture answers for the rest,
+and the result is `undefined` only when **neither** knows anything. `storageOf`, `adminContactOf`
+and `resolvedGuards` all implement it identically.
+
+**A blank string counts as unknown**, so a payload that carries `email: ''` or `post: '   '` falls
+back to the fixture instead of rendering an empty line. Two carve-outs keep their own meaning:
+`app: 'none'` is a real prototype state (`QR_Z_Open/app.js:172`) and an explicit `last: null`
+means "never synced".
+
+**What the API now omits:** `cd`, `admin.email/phone/since`, `security[].post/app/last` — plus the
+storage counters from the first batch. **What it keeps:** `admin.name`, `security[].name`,
+`guests`, `photos`, `dateLabel`, `note`. The names are domain data: `prisma/seed.ts` derives the
+event start from `dateLabel` and creates the `User` rows from `admin.name` / `security[].name`.
+
+## Strict TDD evidence
+
+| Behaviour                                           | RED                                                                                                    | GREEN   |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
+| The scanner KPI counts the resolved app states      | `expected '0' to be '3'`                                                                               | 144/144 |
+| The event row resolves the contact and the badge    | `expected '' to be 'EN 42 DÍAS'` · `expected ['',''] to equal ['mariana.solorzana@valdemar.mx', …]`    | 144/144 |
+| The contact modal does not claim a message was sent | `expected ['Mensaje enviado a undefined']`                                                             | 144/144 |
+| A blank field lets the mock answer                  | `expected { email: '', phone: '   ' } to strictly equal { email: 'mariana.solorzana@valdemar.mx', … }` | 144/144 |
+| A blank badge is not rendered as an empty pill      | `expected '   ' to be 'ESCÁNER — PUERTA A'` · countdown variant                                        | 144/144 |
+
+A fresh-context adversarial review reproduced **9 of 9** of these failures by reverting each hunk
+individually in a throwaway copy.
+
+## Verification gates (actual output)
+
+| Gate                                         | Result                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run test:unit`                          | 11 files / 144 tests passed                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `npm run test:int`                           | 6 files / 33 tests passed                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `npx tsc --noEmit -p tsconfig.app.json`      | exit 0                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `npx tsc --noEmit -p tsconfig.spec.json`     | exit 0                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `npm run build`                              | success, 1 route prerendered                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `./node_modules/.bin/prettier --check .`     | zero flagged files                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `node scripts/verify-parity.mjs --slice all` | 57/57                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Browser (Chrome DevTools MCP)                | admin lines populated (`mariana.solorzana@valdemar.mx`, `+52 646 118 44 20`, `Cliente desde 2023`); scanner KPI `3/ 9`; badge `EN 42 DÍAS` on the upcoming event only; guard posts and app labels render; contact modal header `PARA · mariana.solorzano@valdemar.mx · GALA ANIVERSARIO VALDEMAR` and toast `Mensaje enviado a mariana.solorzana@valdemar.mx`; body text with **no `NaN`** and **no `undefined`**; **no NG0xxx** in the console |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank)
+
+- `5dc3f18` (module + types + mapper + seed + consumers + the module's spec + the modified specs): **541** — **over the 400 budget, size:exception recorded**. The module lands with its own spec deliberately: without it this commit deletes `storage-display.spec.ts` (14 tests) with no replacement and the unit count drops from 105 to 92.
+- `9da3749` (the DOM-level specs of the three families): **171**
+
+## Files touched (third display-state batch)
+
+- **New:** `src/app/core/event-display.ts`, `src/app/core/event-display.spec.ts`,
+  `src/app/features/provider/event-row.spec.ts`, `src/app/shared/modal/contact-modal.spec.ts`
+- **Superseded:** `src/app/core/storage-display.ts`, `src/app/core/storage-display.spec.ts`
+- **Modified:** `src/app/core/models.ts`, `src/app/core/metrics.ts` + spec, `src/app/core/seed-data.ts`,
+  `src/app/core/pase-store.spec.ts`, `src/app/core/api/data-api.service.spec.ts`,
+  `src/app/features/provider/event-row.ts`, `src/app/shared/modal/contact-modal.ts`,
+  `src/app/shared/modal/storage-plan-modal.ts`, `src/server/data/repositories/events.ts`,
+  `src/server/api/events.int.spec.ts`, `src/server/data/seed.int.spec.ts`, `prisma/seed.ts`
+- **Untouched:** `prisma/schema.prisma` (no migration), `QR_Z_Open/`
+
+## PR-2a handoff notes (from the third display-state batch)
+
+- **`POST /api/events` must return the same event shape**: no `cd`, no `admin.email/phone/since`,
+  no `security[].post/app/last` and no `used`/`max`/`br`. An event created through the API has no
+  fixture, so its display fields render the honest em dash. That is the intended behaviour.
+- **The display module is now the single owner** of the prototype's display fixtures. If 2a needs
+  a new display field (a provider contact, a QR label), it belongs in `event-display.ts` — not in
+  the mapper — or the API starts faking values again.
+- **The `PERSISTED_IDS` alias binds by seed position.** If `prisma/seed.ts` ever changes the
+  event **order** the alias silently mis-binds; if the id **scheme** changes the display falls back
+  to the em dash. Both are covered by tests. The systemic fix — one id space for the same records
+  — is still deferred.
