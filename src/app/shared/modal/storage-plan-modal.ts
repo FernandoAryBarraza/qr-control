@@ -1,9 +1,13 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 
 import { PaseStore } from '../../core/pase-store';
 import { ModalService } from '../../core/modal.service';
 import { Icon } from '../icon';
-import { gb } from '../../core/metrics';
+import { storageUsage } from '../../core/metrics';
+import { storageOf } from '../../core/storage-display';
+
+/** The plan the modal falls back to when the event has no contract. */
+const DEFAULT_PLAN_GB = 50;
 
 @Component({
   selector: 'app-storage-plan-modal',
@@ -20,9 +24,7 @@ import { gb } from '../../core/metrics';
         </button>
       </div>
       <div class="m-body">
-        <div class="adm-line mono" style="margin-bottom:16px">
-          USO ACTUAL · {{ gb(ev.used) }} GB DE {{ ev.max }} GB
-        </div>
+        <div class="adm-line mono" style="margin-bottom:16px">USO ACTUAL · {{ usage() }}</div>
         @for (plan of plans; track plan.gb) {
           <label class="plan" [class.sel]="selectedPlan() === plan.gb">
             <input
@@ -140,26 +142,41 @@ export class StoragePlanModal {
   private readonly store = inject(PaseStore);
   private readonly modals = inject(ModalService);
 
-  protected readonly gb = gb;
   protected readonly plans = [
     { gb: 50, price: 12 },
     { gb: 100, price: 22 },
     { gb: 200, price: 40 },
   ];
 
-  protected selectedPlan = signal(50);
+  /** The plan the user picked; `undefined` means "the event's current plan". */
+  private readonly pickedPlan = signal<number | undefined>(undefined);
 
-  protected event() {
+  /** The event the modal is about. */
+  protected readonly event = computed(() => {
     const id = this.eventId();
-    const ev = id ? this.store.eventById(id) : undefined;
-    if (ev && this.selectedPlan() === 50) {
-      this.selectedPlan.set(ev.max);
-    }
-    return ev;
-  }
+    return id === undefined ? undefined : this.store.eventById(id);
+  });
+
+  /** The event's storage, resolved through the client-side display mock. */
+  protected readonly storage = computed(() => {
+    const event = this.event();
+    return event === undefined ? undefined : storageOf(event);
+  });
+
+  /**
+   * The plan the modal highlights: the event's current plan until the user
+   * picks another one. It is DERIVED, never written during the render —
+   * writing a signal while Angular renders the template raises NG0600.
+   */
+  protected readonly selectedPlan = computed(
+    () => this.pickedPlan() ?? this.storage()?.max ?? DEFAULT_PLAN_GB,
+  );
+
+  /** "12.4 GB DE 50 GB" — or the em dash when the event has no contract. */
+  protected readonly usage = computed(() => storageUsage(this.storage()));
 
   protected selectPlan(gbVal: number): void {
-    this.selectedPlan.set(gbVal);
+    this.pickedPlan.set(gbVal);
   }
 
   protected apply(): void {

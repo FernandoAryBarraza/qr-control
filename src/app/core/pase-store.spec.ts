@@ -17,9 +17,6 @@ const DB_EVENT: PaseEvent = {
   cd: null,
   guests: 3,
   photos: 1,
-  used: 0,
-  max: 0,
-  br: { FOTOS: 0, VÍDEOS: 0, OTROS: 0 },
   admin: { name: 'Mariana Solórzano', email: '', phone: '', since: '' },
   security: [{ name: 'Rafael Ortiz', post: '', app: 'none', last: null }],
 };
@@ -141,6 +138,23 @@ describe('PaseStore.load() — hydration-safe client read path', () => {
     expect(store.metrics().planned).toBe(3);
     expect(store.metrics().passes).toBe(2);
     expect(store.pendingPhotoCount()).toBe(0);
+  });
+
+  it('keeps the storage counters out of the payload — the client owns them', async () => {
+    const store = TestBed.inject(PaseStore);
+    const pending = store.load();
+    http.expectOne('/api/events').flush([DB_EVENT]);
+    await settle();
+    http.expectOne('/api/events/ev-001/guests').flush(DB_GUESTS);
+    http.expectOne('/api/events/ev-001/photos').flush(DB_PHOTOS);
+    await pending;
+
+    // The API does not own the storage counters (they are not stored —
+    // design §3), so the payload carries none; the client's display mock
+    // resolves them instead.
+    expect(store.events()[0]).not.toHaveProperty('used');
+    expect(store.events()[0]).not.toHaveProperty('max');
+    expect(store.events()[0]).not.toHaveProperty('br');
   });
 
   it('falls back to the seed snapshot and ends loading when the API rejects', async () => {

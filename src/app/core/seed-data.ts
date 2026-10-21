@@ -223,6 +223,10 @@ export const PHOTOS: readonly EventPhoto[] = PHOTO_DEFS.map((d, i) => ({
 }));
 
 /* ---------- Datos: eventos del proveedor ---------- */
+/**
+ * The storage counters (used/max/br) are NOT here: they are a client-side
+ * display mock and live in `storage-display.ts`, which is their only copy.
+ */
 export const EVENTS: readonly PaseEvent[] = [
   {
     id: 'ev1',
@@ -232,9 +236,6 @@ export const EVENTS: readonly PaseEvent[] = [
     cd: null,
     guests: 218,
     photos: 96,
-    used: 12.4,
-    max: 50,
-    br: { FOTOS: 11.6, VÍDEOS: 0.6, OTROS: 0.2 },
     admin: {
       name: 'Mariana Solórzano',
       email: 'mariana.solorzana@valdemar.mx',
@@ -256,9 +257,6 @@ export const EVENTS: readonly PaseEvent[] = [
     cd: 'EN 42 DÍAS',
     guests: 140,
     photos: 12,
-    used: 0.8,
-    max: 30,
-    br: { FOTOS: 0.5, VÍDEOS: 0.2, OTROS: 0.1 },
     admin: {
       name: 'Diego Riva',
       email: 'diego@hernandezriva.wed',
@@ -278,9 +276,6 @@ export const EVENTS: readonly PaseEvent[] = [
     cd: null,
     guests: 412,
     photos: 1204,
-    used: 38.2,
-    max: 50,
-    br: { FOTOS: 34.9, VÍDEOS: 3.0, OTROS: 0.3 },
     note: 'Archivado · la nube se libera el 02 AGO 2025',
     admin: {
       name: 'Carla Ibáñez',

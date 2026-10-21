@@ -4,9 +4,15 @@ import type { EventScope } from '../event-scope';
 import { getPrisma } from '../prisma-client';
 
 // Prisma Event -> domain PaseEvent mapping (design §4): Prisma types never leave
-// src/server/**. Fields the prototype never persisted (counters used/max, storage
-// breakdown, admin contact details) are synthesized as empty/zero; `dateLabel` is
-// rebuilt from `start`, and `finished` maps back to the client's `done` (1b handoff).
+// src/server/**. Fields the prototype never persisted (admin contact details) are
+// synthesized as empty; `dateLabel` is rebuilt from `start`, and `finished` maps
+// back to the client's `done` (1b handoff).
+//
+// The storage counters (used/max/br) are NOT mapped: they are not stored
+// (design §3) and the storage service does not exist yet, so the API
+// promises no storage figures. The client resolves them from its own display
+// mock (`src/app/core/storage-display.ts`) — faking zeroes here is what made
+// the provider view render `NaN`.
 const MONTHS = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
 const pad2 = (value: number): string => String(value).padStart(2, '0');
 
@@ -35,9 +41,6 @@ function toPaseEvent(event: EventRow): PaseEvent {
     cd: null,
     guests: event._count.guests,
     photos: event._count.photos,
-    used: 0,
-    max: 0,
-    br: { FOTOS: 0, VÍDEOS: 0, OTROS: 0 },
     admin: { name: adminName, email: '', phone: '', since: '' },
     security,
   };

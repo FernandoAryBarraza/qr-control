@@ -77,9 +77,16 @@ export interface PaseEvent {
   readonly cd: string | null;
   readonly guests: number;
   readonly photos: number;
-  readonly used: number;
-  readonly max: number;
-  readonly br: StorageBreakdown;
+  /**
+   * Storage figures — display-only and NOT part of the API contract: the
+   * counters are not stored (design §3) and the storage service does not
+   * exist yet, so the server sends neither. The client resolves them from
+   * its own display mock (`storage-display.ts`); `max` is the exception,
+   * because applying a plan writes it back onto the event.
+   */
+  readonly used?: number;
+  readonly max?: number;
+  readonly br?: StorageBreakdown;
   readonly note?: string;
   readonly admin: EventAdmin;
   readonly security: readonly SecurityGuard[];

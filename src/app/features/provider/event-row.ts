@@ -1,7 +1,8 @@
 import { Component, computed, inject, input, output } from '@angular/core';
 
 import type { PaseEvent } from '../../core/models';
-import { gb, barClass } from '../../core/metrics';
+import { gb, storageBarClass, storageBarWidth, storageLine } from '../../core/metrics';
+import { storageOf } from '../../core/storage-display';
 import { Icon } from '../../shared/icon';
 
 @Component({
@@ -35,7 +36,7 @@ import { Icon } from '../../shared/icon';
           {{ event().photos }} FOTOS</span
         >
         <span class="er-storage">
-          <span class="mono">{{ gb(event().used) }} / {{ event().max }} GB</span>
+          <span class="mono">{{ line() }}</span>
           <span class="er-bar" [class.warn]="barCls() === 'warn'" [class.bad]="barCls() === 'bad'">
             <span [style.width]="barWidth()"></span>
           </span>
@@ -84,8 +85,12 @@ import { Icon } from '../../shared/icon';
           <div class="dcolb">
             <div class="dcol-label">ALMACENAMIENTO OCUPADO POR INVITADOS</div>
             <div class="sto-num">
-              {{ gb(event().used) }}<span class="unit"> GB</span
-              ><span class="sto-max mono">/ {{ event().max }} GB</span>
+              @if (storage(); as s) {
+                {{ gb(s.used) }}<span class="unit"> GB</span
+                ><span class="sto-max mono">/ {{ s.max }} GB</span>
+              } @else {
+                <span>—</span>
+              }
             </div>
             <span
               class="er-bar big"
@@ -126,15 +131,18 @@ export class EventRow {
   readonly upgradeStorage = output<void>();
 
   protected readonly gb = gb;
-  protected readonly barCls = computed(() => barClass(this.event().used, this.event().max));
-  protected readonly barWidth = computed(() => {
-    const ratio = this.event().used / this.event().max;
-    return `${Math.min(100, ratio * 100)}%`;
-  });
+  /** The event's storage, resolved through the client-side display mock. */
+  protected readonly storage = computed(() => storageOf(this.event()));
+  protected readonly line = computed(() => storageLine(this.storage()));
+  protected readonly barCls = computed(() => storageBarClass(this.storage()));
+  protected readonly barWidth = computed(() => storageBarWidth(this.storage()));
   protected readonly onlineCount = computed(
     () => this.event().security.filter((s) => s.app === 'online').length,
   );
-  protected readonly breakdown = computed(() => Object.entries(this.event().br));
+  protected readonly breakdown = computed(() => {
+    const br = this.storage()?.br;
+    return br === undefined ? [] : Object.entries(br);
+  });
 
   protected statusLabel(status: PaseEvent['status']): string {
     const map = { active: 'ACTIVO', upcoming: 'PRÓXIMO', done: 'FINALIZADO' } as const;

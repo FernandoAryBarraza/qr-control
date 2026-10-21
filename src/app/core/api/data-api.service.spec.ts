@@ -14,9 +14,6 @@ const EVENT: PaseEvent = {
   cd: null,
   guests: 14,
   photos: 6,
-  used: 0,
-  max: 0,
-  br: { FOTOS: 0, VÍDEOS: 0, OTROS: 0 },
   admin: { name: 'Mariana Solórzano', email: '', phone: '', since: '' },
   security: [{ name: 'Rafael Ortiz', post: '', app: 'none', last: null }],
 };

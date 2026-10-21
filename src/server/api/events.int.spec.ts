@@ -57,4 +57,22 @@ describe('GET /api/events', () => {
 
     expect(JSON.stringify(await res.json())).not.toContain('Boda Hernández');
   });
+
+  it('omits the storage counters the API does not own', async () => {
+    const events = (await (await get('/api/events', PROVIDER)).json()) as Record<string, unknown>[];
+
+    // The storage service does not exist yet and the counters are not stored
+    // (design §3), so the API promises no storage figures at all. Faking
+    // zeroes here is what made the client render NaN.
+    for (const event of events) {
+      expect(event).not.toHaveProperty('used');
+      expect(event).not.toHaveProperty('max');
+      expect(event).not.toHaveProperty('br');
+    }
+
+    // The counters the API DOES own stay real.
+    const gala = events.find((event) => event['id'] === 'ev-001');
+    expect(gala?.['guests']).toBe(14);
+    expect(gala?.['photos']).toBe(14);
+  });
 });
