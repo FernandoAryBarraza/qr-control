@@ -2,14 +2,14 @@
 
 ## Review Workload Forecast
 
-| Field | Value |
-|-------|-------|
+| Field                   | Value                                                |
+| ----------------------- | ---------------------------------------------------- |
 | Estimated changed lines | ~230–300 total (~200–260 CODE, excl. comments/blank) |
-| 400-line budget risk | Low |
-| Chained PRs recommended | No |
-| Suggested split | Single PR |
-| Delivery strategy | ask-always |
-| Chain strategy | pending |
+| 400-line budget risk    | Low                                                  |
+| Chained PRs recommended | No                                                   |
+| Suggested split         | Single PR                                            |
+| Delivery strategy       | ask-always                                           |
+| Chain strategy          | pending                                              |
 
 Decision needed before apply: No
 Chained PRs recommended: No
@@ -18,11 +18,11 @@ Chain strategy: pending
 
 ### Suggested Work Units
 
-| Unit | Goal | Likely PR | Notes |
-|------|------|-----------|-------|
-| 1 | RED: parser round-trip spec fails against current markup | PR 1 | tests included with behavior in Unit 2 commit |
-| 2 | GREEN: 3-file conversion + `:host` CSS rework, suite green | PR 1 | base = main; rollback `git checkout -- src/app/features/admin/guests/` |
-| 3 | Build + browser-harness verification evidence | PR 1 | no code; checklist output only |
+| Unit | Goal                                                       | Likely PR | Notes                                                                  |
+| ---- | ---------------------------------------------------------- | --------- | ---------------------------------------------------------------------- |
+| 1    | RED: parser round-trip spec fails against current markup   | PR 1      | tests included with behavior in Unit 2 commit                          |
+| 2    | GREEN: 3-file conversion + `:host` CSS rework, suite green | PR 1      | base = main; rollback `git checkout -- src/app/features/admin/guests/` |
+| 3    | Build + browser-harness verification evidence              | PR 1      | no code; checklist output only                                         |
 
 ## Phase 1: Safety Net (strict TDD baseline)
 

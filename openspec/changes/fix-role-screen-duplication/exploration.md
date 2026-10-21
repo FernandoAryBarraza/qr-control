@@ -63,11 +63,11 @@ Chain, with evidence:
 
 5. **Role switch stacks instead of replacing.** Measured in real Chromium:
 
-   | Step | `#view-admin` tops | `#view-provider` tops | body scrollHeight |
-   |------|--------------------|-----------------------|-------------------|
-   | load | `[107]` | `[]` | 2091 |
-   | → Proveedor | `[107]` (untouched) | `[1953]` | 2874 |
-   | → Administrador | `[107, 1953]` **(two stacked)** | `[]` | 4035 |
+   | Step            | `#view-admin` tops              | `#view-provider` tops | body scrollHeight |
+   | --------------- | ------------------------------- | --------------------- | ----------------- |
+   | load            | `[107]`                         | `[]`                  | 2091              |
+   | → Proveedor     | `[107]` (untouched)             | `[1953]`              | 2874              |
+   | → Administrador | `[107, 1953]` **(two stacked)** | `[]`                  | 4035              |
 
    This is exactly the reported symptom: upper copy stale, lower copy live,
    "Proveedor changes only the second", and with Administrador active the SAME

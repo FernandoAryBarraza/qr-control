@@ -7,11 +7,13 @@ The prototype (`QR_Z_Open/`) is the visual source of truth, but the port drifted
 ## Scope
 
 **In Scope**
+
 - Tailwind v4 for Angular 22 + SSR: deps `tailwindcss`/`@tailwindcss/postcss`, `.postcssrc.json` plugin, `@import "tailwindcss";`.
 - Prototype parity: revert metrics stat row to the "ruled row"; align diverging tokens to prototype values.
 - Global-first responsive rules reconciled to prototype's 1180/920 blocks.
 
 **Out of Scope**
+
 - Per-component Tailwind migration (later slices).
 - tsconfig strict, coverage/E2E tooling, `feed.service.ts` NG0203.
 
@@ -27,23 +29,23 @@ Hybrid: fidelity FIRST via tokens + global CSS, Tailwind as mechanism. Chained s
 
 ## Affected Areas
 
-| Area | Impact | Description |
-|------|--------|-------------|
-| `package.json`, `.postcssrc.json` | Modified | Tailwind v4 deps + PostCSS plugin |
-| `src/styles.css` | Modified | `@import`, tokens, 1180/920 rules |
-| `.../admin/metrics/{metrics-section,stat-tile}.ts` | Modified | Ruled-row revert |
-| `.../admin/photos/photo-cloud.ts` | Modified | `.pending-flag` accent, `.panel` parity |
+| Area                                               | Impact   | Description                             |
+| -------------------------------------------------- | -------- | --------------------------------------- |
+| `package.json`, `.postcssrc.json`                  | Modified | Tailwind v4 deps + PostCSS plugin       |
+| `src/styles.css`                                   | Modified | `@import`, tokens, 1180/920 rules       |
+| `.../admin/metrics/{metrics-section,stat-tile}.ts` | Modified | Ruled-row revert                        |
+| `.../admin/photos/photo-cloud.ts`                  | Modified | `.pending-flag` accent, `.panel` parity |
 
 Slices affected: admin (metrics, photos); guests/provider untouched (responsive rules are global).
 
 ## Risks
 
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| Tailwind misses dynamic classes | Low | Audit template literals |
-| SSR/hydration drift | Low | Static CSS only, no runtime injection |
-| Token reverts hurt WCAG AA contrast | Med | Open question; verify AXE |
-| Responsive revert breaks `fix-role-screen` | Low | `tr` hosts untouched |
+| Risk                                       | Likelihood | Mitigation                            |
+| ------------------------------------------ | ---------- | ------------------------------------- |
+| Tailwind misses dynamic classes            | Low        | Audit template literals               |
+| SSR/hydration drift                        | Low        | Static CSS only, no runtime injection |
+| Token reverts hurt WCAG AA contrast        | Med        | Open question; verify AXE             |
+| Responsive revert breaks `fix-role-screen` | Low        | `tr` hosts untouched                  |
 
 ## Rollback Plan
 

@@ -10,20 +10,20 @@ context: |
 strict_tdd: true
 
 testing:
-  test_command: "ng test --watch=false"
-  watch_command: "ng test"
-  runner: "vitest 4.1.11 (via @angular/build:unit-test)"
+  test_command: 'ng test --watch=false'
+  watch_command: 'ng test'
+  runner: 'vitest 4.1.11 (via @angular/build:unit-test)'
   coverage: false
-  coverage_command: "— (requires dev dep @vitest/coverage-v8)"
+  coverage_command: '— (requires dev dep @vitest/coverage-v8)'
   layers:
     unit: true
     integration: true
     e2e: false
-  integration_test_command: "npm run test:int"
+  integration_test_command: 'npm run test:int'
   quality:
-    formatter: "npx prettier --check ."
-    type_checker: "npx tsc --noEmit -p tsconfig.app.json && ng build"
-    linter: "— (no ESLint installed)"
+    formatter: 'npx prettier --check .'
+    type_checker: 'npx tsc --noEmit -p tsconfig.app.json && ng build'
+    linter: '— (no ESLint installed)'
 
 rules:
   proposal:
@@ -46,8 +46,8 @@ rules:
     - Follow existing code patterns (standalone components, input()/output(), no ngClass/ngStyle)
     - All AXE/WCAG AA accessibility requirements are non-negotiable
   verify:
-    test_command: "ng test --watch=false"
-    build_command: "ng build"
+    test_command: 'ng test --watch=false'
+    build_command: 'ng build'
     coverage_threshold: 0
   archive:
     - Warn before merging destructive deltas
