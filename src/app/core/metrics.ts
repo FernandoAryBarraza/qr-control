@@ -10,8 +10,8 @@ import type {
   PhotoState,
   StatTileDef,
 } from './models';
-import { NO_STORAGE, storageTotals } from './storage-display';
-import type { StorageFixture, StorageTotals } from './storage-display';
+import { NO_VALUE, resolvedGuards, storageTotals } from './event-display';
+import type { StorageFixture, StorageTotals } from './event-display';
 
 /**
  * Pure derivation of every figure the UI shows. No DOM, no signals, no
@@ -27,7 +27,7 @@ import type { StorageFixture, StorageTotals } from './storage-display';
  * can show `NaN`.
  */
 export function gb(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(1) : NO_STORAGE;
+  return Number.isFinite(value) ? value.toFixed(1) : NO_VALUE;
 }
 
 /**
@@ -79,12 +79,12 @@ export function barClass(used: number, max: number): '' | 'warn' | 'bad' {
 
 /** The used/max figures of an event: "12.4 / 50 GB", or the em dash. */
 export function storageLine(storage: StorageFixture | undefined): string {
-  return storage === undefined ? NO_STORAGE : `${gb(storage.used)} / ${storage.max} GB`;
+  return storage === undefined ? NO_VALUE : `${gb(storage.used)} / ${storage.max} GB`;
 }
 
 /** The usage line of the storage modal: "12.4 GB DE 50 GB", or the em dash. */
 export function storageUsage(storage: StorageFixture | undefined): string {
-  return storage === undefined ? NO_STORAGE : `${gb(storage.used)} GB DE ${storage.max} GB`;
+  return storage === undefined ? NO_VALUE : `${gb(storage.used)} GB DE ${storage.max} GB`;
 }
 
 /** The width of an event's storage bar: "24.8%", or "0%" without a contract. */
@@ -233,8 +233,12 @@ export function eventFilters(events: readonly PaseEvent[]): FilterOption[] {
 }
 
 export function kpis(events: readonly PaseEvent[]): KpiDef[] {
+  // The scanner app state is display-only and the API sends none of it (the
+  // scanner service does not exist yet), so the count comes from the
+  // client-side display mock — resolved guard by guard, never from the raw
+  // payload, which carries nothing to count.
   const online = events.reduce(
-    (a, e) => a + e.security.filter((s) => s.app === 'online').length,
+    (a, e) => a + resolvedGuards(e).filter((guard) => guard.app === 'online').length,
     0,
   );
   const guards = events.reduce((a, e) => a + e.security.length, 0);
@@ -272,7 +276,7 @@ export function kpis(events: readonly PaseEvent[]): KpiDef[] {
     },
     {
       label: 'ALMACENAMIENTO EN NUBE',
-      value: totals === undefined ? NO_STORAGE : gb(totals.used),
+      value: totals === undefined ? NO_VALUE : gb(totals.used),
       unit: totals === undefined ? '' : 'GB',
       sub: '',
       subPrefix: totals === undefined ? '' : `DE ${totals.max} GB CONTRATADOS · `,

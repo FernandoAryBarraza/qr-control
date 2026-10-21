@@ -11,11 +11,10 @@ const EVENT: PaseEvent = {
   status: 'active',
   name: 'Harbor Lights Festival',
   dateLabel: '14 JUN 2025 · 20:00',
-  cd: null,
   guests: 14,
   photos: 6,
-  admin: { name: 'Mariana Solórzano', email: '', phone: '', since: '' },
-  security: [{ name: 'Rafael Ortiz', post: '', app: 'none', last: null }],
+  admin: { name: 'Mariana Solórzano' },
+  security: [{ name: 'Rafael Ortiz' }],
 };
 
 const GUEST: Guest = {

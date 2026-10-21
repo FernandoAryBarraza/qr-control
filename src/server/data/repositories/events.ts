@@ -4,15 +4,17 @@ import type { EventScope } from '../event-scope';
 import { getPrisma } from '../prisma-client';
 
 // Prisma Event -> domain PaseEvent mapping (design §4): Prisma types never leave
-// src/server/**. Fields the prototype never persisted (admin contact details) are
-// synthesized as empty; `dateLabel` is rebuilt from `start`, and `finished` maps
+// src/server/**. `dateLabel` is rebuilt from `start`, and `finished` maps
 // back to the client's `done` (1b handoff).
 //
-// The storage counters (used/max/br) are NOT mapped: they are not stored
-// (design §3) and the storage service does not exist yet, so the API
-// promises no storage figures. The client resolves them from its own display
-// mock (`src/app/core/storage-display.ts`) — faking zeroes here is what made
-// the provider view render `NaN`.
+// Four display-only families are NOT mapped, because the database does not own
+// them and no service exists yet: the storage counters (used/max/br — not
+// stored, design §3), the countdown (cd — not stored), the admin contact
+// details (the `User` model has no email/phone column) and the guard details
+// (post/app/last — the scanner service does not exist yet). Synthesizing
+// empties here is what made the provider view render blank lines and count
+// 0 scanners online; the client resolves all four from its own display mock
+// (`src/app/core/event-display.ts`).
 const MONTHS = 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split(' ');
 const pad2 = (value: number): string => String(value).padStart(2, '0');
 
@@ -28,9 +30,7 @@ function toPaseEvent(event: EventRow): PaseEvent {
   let adminName = '';
   for (const { user } of event.assignments) {
     if (user.role === 'admin') adminName = user.name;
-    else if (user.role === 'security') {
-      security.push({ name: user.name, post: '', app: 'none', last: null });
-    }
+    else if (user.role === 'security') security.push({ name: user.name });
   }
   const mapped: PaseEvent = {
     id: event.id,
@@ -38,10 +38,9 @@ function toPaseEvent(event: EventRow): PaseEvent {
     name: event.name,
     // `start` -> the client's display label, e.g. '14 JUN 2025 · 20:00' (UTC).
     dateLabel: `${pad2(event.start.getUTCDate())} ${MONTHS[event.start.getUTCMonth()]} ${event.start.getUTCFullYear()} · ${pad2(event.start.getUTCHours())}:${pad2(event.start.getUTCMinutes())}`,
-    cd: null,
     guests: event._count.guests,
     photos: event._count.photos,
-    admin: { name: adminName, email: '', phone: '', since: '' },
+    admin: { name: adminName },
     security,
   };
   return event.note === null ? mapped : { ...mapped, note: event.note };

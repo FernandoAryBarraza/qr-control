@@ -58,6 +58,26 @@ describe('GET /api/events', () => {
     expect(JSON.stringify(await res.json())).not.toContain('Boda Hernández');
   });
 
+  it('omits the display-only fields the API does not own', async () => {
+    const events = (await (await get('/api/events', PROVIDER)).json()) as Record<string, unknown>[];
+
+    // The countdown, the admin contact details and the guard details have NO
+    // database source (the `User` model carries no email/phone, and the
+    // scanner service does not exist yet), so the API promises none of them:
+    // it sends the names it owns and nothing else. The client resolves the
+    // rest from its own display mock (`src/app/core/event-display.ts`).
+    for (const event of events) {
+      expect(event).not.toHaveProperty('cd');
+
+      const admin = event['admin'] as Record<string, unknown>;
+      expect(Object.keys(admin)).toEqual(['name']);
+
+      for (const guard of event['security'] as Record<string, unknown>[]) {
+        expect(Object.keys(guard)).toEqual(['name']);
+      }
+    }
+  });
+
   it('omits the storage counters the API does not own', async () => {
     const events = (await (await get('/api/events', PROVIDER)).json()) as Record<string, unknown>[];
 

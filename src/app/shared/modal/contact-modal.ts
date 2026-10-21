@@ -1,8 +1,9 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 
 import { PaseStore } from '../../core/pase-store';
 import { ModalService } from '../../core/modal.service';
 import { ToastService } from '../../core/toast.service';
+import { NO_VALUE, adminContactOf } from '../../core/event-display';
 import { Icon } from '../icon';
 
 @Component({
@@ -19,7 +20,7 @@ import { Icon } from '../icon';
       </div>
       <div class="m-body">
         <div class="adm-line mono" style="margin-bottom:14px">
-          PARA · {{ ev.admin.email }} · {{ ev.name.toUpperCase() }}
+          PARA · {{ email() }} · {{ ev.name.toUpperCase() }}
         </div>
         <label class="sr-only" for="msgTxt">Mensaje para la administradora del evento</label>
         <textarea
@@ -115,21 +116,46 @@ export class ContactModal {
 
   protected readonly message = signal('');
 
-  protected event() {
+  /** The event the modal is about. */
+  protected readonly event = computed(() => {
     const id = this.eventId();
     return id ? this.store.eventById(id) : undefined;
-  }
+  });
+
+  /**
+   * The administrator's contact, resolved through the client-side display
+   * mock: the API sends no address at all (the `User` model carries no
+   * email column).
+   */
+  protected readonly contact = computed(() => {
+    const event = this.event();
+    return event === undefined ? undefined : adminContactOf(event);
+  });
+
+  /** The address the provider writes to, or the em dash when there is none. */
+  protected readonly email = computed(() => this.contact()?.email ?? NO_VALUE);
 
   protected onInput(event: Event): void {
     const target = event.target as HTMLTextAreaElement;
     this.message.set(target.value);
   }
 
+  /**
+   * Sends the message and says what actually happened: with a usable address
+   * on file the toast names the real address, without one it must not claim
+   * that a message was sent to an address that does not exist.
+   */
   protected send(): void {
     const ev = this.event();
     if (!ev) return;
+    // A blank address is no address at all: it must take the warn path.
+    const address = this.contact()?.email?.trim();
     this.modals.close();
-    this.toast.push(`Mensaje enviado a ${ev.admin.email}`, 'ok', 'mailCheck');
+    if (!address) {
+      this.toast.push('No hay una dirección de correo para este evento', 'warn', 'circleSlash');
+      return;
+    }
+    this.toast.push(`Mensaje enviado a ${address}`, 'ok', 'mailCheck');
   }
 
   protected close(): void {

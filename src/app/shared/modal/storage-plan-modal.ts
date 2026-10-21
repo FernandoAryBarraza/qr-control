@@ -4,7 +4,7 @@ import { PaseStore } from '../../core/pase-store';
 import { ModalService } from '../../core/modal.service';
 import { Icon } from '../icon';
 import { storageUsage } from '../../core/metrics';
-import { storageOf } from '../../core/storage-display';
+import { storageOf } from '../../core/event-display';
 
 /** The plan the modal falls back to when the event has no contract. */
 const DEFAULT_PLAN_GB = 50;

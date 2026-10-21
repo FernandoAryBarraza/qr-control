@@ -1,8 +1,14 @@
 import { Component, computed, inject, input, output } from '@angular/core';
 
-import type { PaseEvent } from '../../core/models';
+import type { PaseEvent, ScanAppState } from '../../core/models';
 import { gb, storageBarClass, storageBarWidth, storageLine } from '../../core/metrics';
-import { storageOf } from '../../core/storage-display';
+import {
+  NO_VALUE,
+  adminContactOf,
+  countdownOf,
+  resolvedGuards,
+  storageOf,
+} from '../../core/event-display';
 import { Icon } from '../../shared/icon';
 
 @Component({
@@ -27,8 +33,8 @@ import { Icon } from '../../shared/icon';
         </span>
         <span class="er-name">
           {{ event().name }}
-          @if (event().cd) {
-            <span class="er-cd">{{ event().cd }}</span>
+          @if (countdown(); as cd) {
+            <span class="er-cd">{{ cd }}</span>
           }
         </span>
         <span class="er-facts mono"
@@ -50,18 +56,18 @@ import { Icon } from '../../shared/icon';
           <div class="dcolb">
             <div class="dcol-label">ADMINISTRADOR DEL EVENTO</div>
             <div class="adm-name">{{ event().admin.name }}</div>
-            <div class="adm-line mono">{{ event().admin.email }}</div>
-            <div class="adm-line mono">{{ event().admin.phone }}</div>
-            <div class="adm-since">{{ event().admin.since }}</div>
+            <div class="adm-line mono">{{ email() }}</div>
+            <div class="adm-line mono">{{ phone() }}</div>
+            <div class="adm-since">{{ since() }}</div>
             <button type="button" class="btn sm" (click)="contactAdmin.emit()">
               <app-icon name="messageSquare" [size]="12" />Enviar mensaje
             </button>
           </div>
           <div class="dcolb">
             <div class="dcol-label">
-              SEGURIDAD CON APP ESCÁNER · {{ onlineCount() }}/{{ event().security.length }} EN LÍNEA
+              SEGURIDAD CON APP ESCÁNER · {{ onlineCount() }}/{{ guards().length }} EN LÍNEA
             </div>
-            @for (s of event().security; track $index) {
+            @for (s of guards(); track $index) {
               <div class="sec-item">
                 <div>
                   <div class="sec-name">{{ s.name }}</div>
@@ -136,8 +142,20 @@ export class EventRow {
   protected readonly line = computed(() => storageLine(this.storage()));
   protected readonly barCls = computed(() => storageBarClass(this.storage()));
   protected readonly barWidth = computed(() => storageBarWidth(this.storage()));
+
+  /** The countdown badge, resolved through the client-side display mock. */
+  protected readonly countdown = computed(() => countdownOf(this.event()));
+
+  /** The administrator's contact, resolved through the client-side display mock. */
+  protected readonly contact = computed(() => adminContactOf(this.event()));
+  protected readonly email = computed(() => this.contact()?.email ?? NO_VALUE);
+  protected readonly phone = computed(() => this.contact()?.phone ?? NO_VALUE);
+  protected readonly since = computed(() => this.contact()?.since ?? NO_VALUE);
+
+  /** The guards, every display field resolved through the display mock. */
+  protected readonly guards = computed(() => resolvedGuards(this.event()));
   protected readonly onlineCount = computed(
-    () => this.event().security.filter((s) => s.app === 'online').length,
+    () => this.guards().filter((guard) => guard.app === 'online').length,
   );
   protected readonly breakdown = computed(() => {
     const br = this.storage()?.br;
@@ -149,13 +167,14 @@ export class EventRow {
     return map[status];
   }
 
-  protected appLabel(app: PaseEvent['security'][number]['app']): string {
+  protected appLabel(app: ScanAppState | undefined): string {
     const map = {
       online: 'EN LÍNEA',
       idle: 'SIN ACTIVAR',
       none: 'SIN INSTALAR',
       archived: 'ARCHIVADA',
     } as const;
-    return map[app];
+    // An unknown state is the em dash — never a label that was never there.
+    return app === undefined ? NO_VALUE : map[app];
   }
 }

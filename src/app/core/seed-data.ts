@@ -224,8 +224,14 @@ export const PHOTOS: readonly EventPhoto[] = PHOTO_DEFS.map((d, i) => ({
 
 /* ---------- Datos: eventos del proveedor ---------- */
 /**
- * The storage counters (used/max/br) are NOT here: they are a client-side
- * display mock and live in `storage-display.ts`, which is their only copy.
+ * The storage counters (used/max/br), the countdown (cd), the admin contact
+ * details (email/phone/since) and the guard details (post/app/last) are NOT
+ * here: they are display fixtures of services that do not exist yet, and they
+ * live in `event-display.ts`, which is their only copy.
+ *
+ * What stays IS the domain data the database owns: the id, the status, the
+ * name, the display date (the seed derives `start` from it), the counters
+ * the client counts itself, the administrator's NAME and the guards' NAMES.
  */
 export const EVENTS: readonly PaseEvent[] = [
   {
@@ -233,20 +239,14 @@ export const EVENTS: readonly PaseEvent[] = [
     status: 'active',
     name: 'Gala Aniversario Valdemar',
     dateLabel: '14 JUN 2025 · 20:00',
-    cd: null,
     guests: 218,
     photos: 96,
-    admin: {
-      name: 'Mariana Solórzano',
-      email: 'mariana.solorzana@valdemar.mx',
-      phone: '+52 646 118 44 20',
-      since: 'Cliente desde 2023',
-    },
+    admin: { name: 'Mariana Solórzano' },
     security: [
-      { name: 'Josué Andrade', post: 'ESCÁNER — PUERTA A', app: 'online', last: '20:41' },
-      { name: 'Paola Reyes', post: 'ESCÁNER — PUERTA B', app: 'online', last: '20:38' },
-      { name: 'Iván Cortés', post: 'ESCÁNER — JARDÍN', app: 'online', last: '20:29' },
-      { name: 'Miguel Ángel Ruiz', post: 'RESERVA — MEDITERRÁNEO', app: 'idle', last: null },
+      { name: 'Josué Andrade' },
+      { name: 'Paola Reyes' },
+      { name: 'Iván Cortés' },
+      { name: 'Miguel Ángel Ruiz' },
     ],
   },
   {
@@ -254,40 +254,21 @@ export const EVENTS: readonly PaseEvent[] = [
     status: 'upcoming',
     name: 'Boda Hernández · Riva',
     dateLabel: '26 JUL 2025 · 17:00',
-    cd: 'EN 42 DÍAS',
     guests: 140,
     photos: 12,
-    admin: {
-      name: 'Diego Riva',
-      email: 'diego@hernandezriva.wed',
-      phone: '+52 55 4021 77 15',
-      since: 'Cliente nuevo · 2025',
-    },
-    security: [
-      { name: 'Sara Lima', post: 'ASIGNADA — RECEPCIÓN', app: 'idle', last: null },
-      { name: 'Marco Toledano', post: 'ASIGNADO — SALÓN', app: 'none', last: null },
-    ],
+    admin: { name: 'Diego Riva' },
+    security: [{ name: 'Sara Lima' }, { name: 'Marco Toledano' }],
   },
   {
     id: 'ev3',
     status: 'done',
     name: 'Convención Nébula Tech',
     dateLabel: '02 MAY 2025 · 09:00',
-    cd: null,
     guests: 412,
     photos: 1204,
     note: 'Archivado · la nube se libera el 02 AGO 2025',
-    admin: {
-      name: 'Carla Ibáñez',
-      email: 'c.ibanez@nebulatech.io',
-      phone: '+52 81 2233 90 04',
-      since: 'Cliente desde 2021',
-    },
-    security: [
-      { name: 'Raúl Prado', post: 'ESCÁNER — ACCESO PRINCIPAL', app: 'archived', last: '—' },
-      { name: 'Ana Sofía Cruz', post: 'ESCÁNER — TERRAZA', app: 'archived', last: '—' },
-      { name: 'Leo Márquez', post: 'ESCÁNER — ESTACIONAMIENTO', app: 'archived', last: '—' },
-    ],
+    admin: { name: 'Carla Ibáñez' },
+    security: [{ name: 'Raúl Prado' }, { name: 'Ana Sofía Cruz' }, { name: 'Leo Márquez' }],
   },
 ];
 

@@ -76,6 +76,9 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
       note: event.note ?? null,
       // Counters (guests/photos/used/max/br), cd, and dateLabel are deliberately
       // NOT persisted — they are display state, recomputed client-side later.
+      // Neither are the admin contact details (email/phone/since) nor the guard
+      // details (post/app/last): the `User` and assignment rows carry no such
+      // columns, so the client resolves them from its own display mock.
     };
   });
 
