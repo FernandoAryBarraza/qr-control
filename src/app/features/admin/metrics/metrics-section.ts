@@ -1,4 +1,13 @@
-import { Component, DestroyRef, PLATFORM_ID, afterNextRender, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  PLATFORM_ID,
+  afterNextRender,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
 import type { FunnelSegment, StatTileDef } from '../../../core/models';

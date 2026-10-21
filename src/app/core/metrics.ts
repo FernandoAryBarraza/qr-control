@@ -134,10 +134,12 @@ export function statDefs(metrics: Metrics): StatTileDef[] {
  */
 export function passPoolOf(guests: readonly Guest[]): Pass[] {
   const pool: Pass[] = [];
-  guests.filter((g) => g.status === 'confirmed').forEach((g) => {
-    pool.push({ code: g.id, name: g.name });
-    g.party.forEach((p, i) => pool.push({ code: `${g.id}·A${i + 1}`, name: p.name }));
-  });
+  guests
+    .filter((g) => g.status === 'confirmed')
+    .forEach((g) => {
+      pool.push({ code: g.id, name: g.name });
+      g.party.forEach((p, i) => pool.push({ code: `${g.id}·A${i + 1}`, name: p.name }));
+    });
   return pool;
 }
 
@@ -181,7 +183,10 @@ export function eventFilters(events: readonly PaseEvent[]): FilterOption[] {
 }
 
 export function kpis(events: readonly PaseEvent[]): KpiDef[] {
-  const online = events.reduce((a, e) => a + e.security.filter((s) => s.app === 'online').length, 0);
+  const online = events.reduce(
+    (a, e) => a + e.security.filter((s) => s.app === 'online').length,
+    0,
+  );
   const guards = events.reduce((a, e) => a + e.security.length, 0);
   const used = events.reduce((a, e) => a + e.used, 0);
   const max = events.reduce((a, e) => a + e.max, 0);

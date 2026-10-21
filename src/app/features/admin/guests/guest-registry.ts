@@ -20,7 +20,12 @@ import { GuestTable } from './guest-table';
         </div>
         <div class="tools">
           <app-search-field [value]="search()" (changed)="searchChanged.emit($event)" />
-          <app-segment-filter [options]="filterOptions()" [value]="guestFilter()" ariaLabel="Filtro de invitados" (changed)="filterChanged.emit($any($event))" />
+          <app-segment-filter
+            [options]="filterOptions()"
+            [value]="guestFilter()"
+            ariaLabel="Filtro de invitados"
+            (changed)="filterChanged.emit($any($event))"
+          />
         </div>
       </div>
       <app-guest-table
@@ -35,11 +40,35 @@ import { GuestTable } from './guest-table';
     </section>
   `,
   styles: `
-    .panel { margin-top: 56px; }
-    .panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--ink); margin-bottom: 0; }
-    .panel-title { font: 550 30px/1.1 'Fraunces'; letter-spacing: -0.01em; margin-top: 6px; }
-    .panel-title .cnt { font: italic 400 18px 'Fraunces'; color: var(--soft); margin-left: 10px; }
-    .tools { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .panel {
+      margin-top: 56px;
+    }
+    .panel-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--ink);
+      margin-bottom: 0;
+    }
+    .panel-title {
+      font: 550 30px/1.1 'Fraunces';
+      letter-spacing: -0.01em;
+      margin-top: 6px;
+    }
+    .panel-title .cnt {
+      font: italic 400 18px 'Fraunces';
+      color: var(--soft);
+      margin-left: 10px;
+    }
+    .tools {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
   `,
 })
 export class GuestRegistry {

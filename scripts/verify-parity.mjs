@@ -80,7 +80,8 @@ function resolvePlaywright() {
 }
 
 function resolveChromium() {
-  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN)) return process.env.CHROME_BIN;
+  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN))
+    return process.env.CHROME_BIN;
   if (process.env.PLAYWRIGHT_CHROMIUM && fs.existsSync(process.env.PLAYWRIGHT_CHROMIUM)) {
     return process.env.PLAYWRIGHT_CHROMIUM;
   }
@@ -135,7 +136,9 @@ function startStaticServer(root) {
         res.end('not found');
         return;
       }
-      res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+      res.writeHead(200, {
+        'content-type': MIME[path.extname(file)] || 'application/octet-stream',
+      });
       res.end(data);
     });
   });
@@ -390,7 +393,12 @@ async function main() {
         eq('S2', '--amber adopts prototype value', t.amber, '#A9750C');
       }
       eq('S2', '--line2 matches prototype', t.line2, 'rgba(27, 22, 17, .32)');
-      eq('S2', '--cream-line keeps .36 (EXC_CREAM_LINE_ALPHA_36)', t.creamLine, 'rgba(243, 239, 230, .36)');
+      eq(
+        'S2',
+        '--cream-line keeps .36 (EXC_CREAM_LINE_ALPHA_36)',
+        t.creamLine,
+        'rgba(243, 239, 230, .36)',
+      );
 
       // AA text contrast of the effective accent/amber as small text on paper.
       check(

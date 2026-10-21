@@ -1,50 +1,50 @@
 :host {
-    display: contents
+  display: contents;
 }
 
 /* Geometry copied verbatim from the prototype's `.radio` rules
    (`QR_Z_Open/style.css:116-158`); only the state selector changed,
    `button.active` -> `button[aria-checked="true"]`. */
 .role-switch {
-    position: relative;
-    display: flex;
-    margin: 0 auto;
-    border: 1px solid var(--ink);
-    border-radius: 999px;
-    padding: 3px;
-    background: var(--paper2)
+  position: relative;
+  display: flex;
+  margin: 0 auto;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--paper2);
 }
 
 .role-thumb {
-    position: absolute;
-    top: 3px;
-    bottom: 3px;
-    left: 3px;
-    width: calc(50% - 3px);
-    background: var(--ink);
-    border-radius: 999px;
-    transition: transform .4s cubic-bezier(.3, .9, .3, 1)
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  background: var(--ink);
+  border-radius: 999px;
+  transition: transform 0.4s cubic-bezier(0.3, 0.9, 0.3, 1);
 }
 
-:host([data-role="provider"]) .role-thumb {
-    transform: translateX(100%)
+:host([data-role='provider']) .role-thumb {
+  transform: translateX(100%);
 }
 
 .role-switch button {
-    position: relative;
-    z-index: 1;
-    width: 138px;
-    padding: 8px 0;
-    border: 0;
-    background: transparent;
-    border-radius: 999px;
-    font: 600 12px 'Space Grotesk';
-    letter-spacing: .05em;
-    color: var(--soft);
-    cursor: pointer;
-    transition: color .3s
+  position: relative;
+  z-index: 1;
+  width: 138px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  font: 600 12px 'Space Grotesk';
+  letter-spacing: 0.05em;
+  color: var(--soft);
+  cursor: pointer;
+  transition: color 0.3s;
 }
 
-.role-switch button[aria-checked="true"] {
-    color: var(--cream)
+.role-switch button[aria-checked='true'] {
+  color: var(--cream);
 }

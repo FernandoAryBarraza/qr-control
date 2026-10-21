@@ -23,7 +23,9 @@ export interface PhotoFilterOption {
         <div class="tools">
           <span class="pending-flag" [class.ok]="pendingCount() === 0">
             <span class="dot"></span>
-            {{ pendingCount() === 0 ? 'FOTOTECA AL DÍA' : pendingCount() + ' PENDIENTES DE REVISIÓN' }}
+            {{
+              pendingCount() === 0 ? 'FOTOTECA AL DÍA' : pendingCount() + ' PENDIENTES DE REVISIÓN'
+            }}
           </span>
           <app-segment-filter
             ariaLabel="Filtros de fotos"
@@ -35,7 +37,9 @@ export interface PhotoFilterOption {
       </div>
       <div class="photo-grid">
         @if (photos().length === 0) {
-          <div class="wp-empty" style="column-span:all">No hay fotos en esta bandeja por ahora.</div>
+          <div class="wp-empty" style="column-span:all">
+            No hay fotos en esta bandeja por ahora.
+          </div>
         } @else {
           @for (photo of photos(); track photo.id) {
             <app-photo-card
@@ -51,21 +55,70 @@ export interface PhotoFilterOption {
     </section>
   `,
   styles: `
-    :host { display: block; }
+    :host {
+      display: block;
+    }
     /* Prototype minimal panel (QR_Z_Open/style.css:583-585): only a top
        margin — no ink border, radius or heavy padding. */
-    .panel { margin-top: 56px; }
-    .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
-    .panel-title { font: 550 28px 'Fraunces'; margin-top: 6px; }
-    .panel-title .cnt { margin-left: 10px; font: 600 11px 'IBM Plex Mono'; color: var(--soft); }
-    .tools { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .panel {
+      margin-top: 56px;
+    }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .panel-title {
+      font: 550 28px 'Fraunces';
+      margin-top: 6px;
+    }
+    .panel-title .cnt {
+      margin-left: 10px;
+      font: 600 11px 'IBM Plex Mono';
+      color: var(--soft);
+    }
+    .tools {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
     /* Prototype uses --accent here, not --amber (QR_Z_Open/style.css:679-686). */
-    .pending-flag { display: inline-flex; align-items: center; gap: 8px; font: 600 9px 'IBM Plex Mono'; letter-spacing: 0.16em; color: var(--accent); }
-    .pending-flag.ok { color: var(--green); }
-    .pending-flag .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-    .sec-label { font: 600 9.5px 'IBM Plex Mono'; letter-spacing: 0.18em; color: var(--soft); }
-    .photo-grid { columns: 4 230px; column-gap: 16px; padding-top: 24px; }
-    .wp-empty { padding: 60px 30px; text-align: center; color: var(--soft); font: italic 400 17px 'Fraunces'; }
+    .pending-flag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font: 600 9px 'IBM Plex Mono';
+      letter-spacing: 0.16em;
+      color: var(--accent);
+    }
+    .pending-flag.ok {
+      color: var(--green);
+    }
+    .pending-flag .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .sec-label {
+      font: 600 9.5px 'IBM Plex Mono';
+      letter-spacing: 0.18em;
+      color: var(--soft);
+    }
+    .photo-grid {
+      columns: 4 230px;
+      column-gap: 16px;
+      padding-top: 24px;
+    }
+    .wp-empty {
+      padding: 60px 30px;
+      text-align: center;
+      color: var(--soft);
+      font: italic 400 17px 'Fraunces';
+    }
   `,
 })
 export class PhotoCloud {

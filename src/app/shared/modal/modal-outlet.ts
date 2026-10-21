@@ -19,7 +19,14 @@ import { StoragePlanModal } from './storage-plan-modal';
  */
 @Component({
   selector: 'app-modal-outlet',
-  imports: [ModalShell, QrTicketModal, PhotoLightbox, PublicWebModal, ContactModal, StoragePlanModal],
+  imports: [
+    ModalShell,
+    QrTicketModal,
+    PhotoLightbox,
+    PublicWebModal,
+    ContactModal,
+    StoragePlanModal,
+  ],
   template: `
     @if (modals.current(); as ref) {
       <app-modal-shell

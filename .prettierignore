@@ -1,0 +1,12 @@
+# FROZEN: vanilla prototype reference corpus. Its style.css/app.js line numbers are
+# cited verbatim in ~15 source comments and test docs (e.g. src/app/core/metrics.ts:18,
+# src/app/features/admin/metrics/stat-tile.ts:20-42, src/app/core/seed-data.ts:15), and
+# scripts/verify-parity.mjs asserts computed CSS against it. Reformatting would silently
+# invalidate those citations and change asserted values, so it must stay byte-identical.
+QR_Z_Open/
+
+# Build output and dependencies: generated artifacts, never hand-edited.
+/dist
+/node_modules
+/out-tsc
+/tmp

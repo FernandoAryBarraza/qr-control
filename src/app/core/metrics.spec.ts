@@ -63,9 +63,9 @@ describe('computeMetrics', () => {
   });
 
   it('splits every guest into exactly one of the four statuses', () => {
-    expect(metrics.confirmed + metrics.declined + metrics.sentPend + (metrics.planned - metrics.invited)).toBe(
-      metrics.planned,
-    );
+    expect(
+      metrics.confirmed + metrics.declined + metrics.sentPend + (metrics.planned - metrics.invited),
+    ).toBe(metrics.planned);
   });
 
   it('derives sentPend from the others instead of counting the list', () => {
@@ -80,7 +80,10 @@ describe('computeMetrics', () => {
   });
 
   it('counts companions of confirmed guests in comp, but of everyone in compPrev', () => {
-    const confirmedParty = GUESTS.filter((x) => x.status === 'confirmed').reduce((a, x) => a + x.party.length, 0);
+    const confirmedParty = GUESTS.filter((x) => x.status === 'confirmed').reduce(
+      (a, x) => a + x.party.length,
+      0,
+    );
     const allParty = GUESTS.reduce((a, x) => a + x.party.length, 0);
 
     expect(metrics.comp).toBe(confirmedParty);
@@ -153,7 +156,12 @@ describe('funnelSegments', () => {
       guest({ status: 'confirmed' }),
     ]);
 
-    expect(funnelSegments(allConfirmed).map((s) => s.width)).toEqual(['100.00%', '0.00%', '0.00%', '0.00%']);
+    expect(funnelSegments(allConfirmed).map((s) => s.width)).toEqual([
+      '100.00%',
+      '0.00%',
+      '0.00%',
+      '0.00%',
+    ]);
     expect(segmentWidth(1.5)).toBe('150.00%'); // prototype quirk, preserved
   });
 });
@@ -198,7 +206,9 @@ describe('statDefs', () => {
   });
 
   it('clamps the companions ratio at 100% even when more show up than expected', () => {
-    const defs = statDefs(computeMetrics([guest({ status: 'confirmed', party: [{ name: 'A', rel: 'X' }] })]));
+    const defs = statDefs(
+      computeMetrics([guest({ status: 'confirmed', party: [{ name: 'A', rel: 'X' }] })]),
+    );
 
     // comp 1 of compPrev 1 -> 100%, and the first tile is always full.
     expect(defs[3].barWidth).toBe('100.0%');

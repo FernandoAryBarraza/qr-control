@@ -65,7 +65,7 @@ export interface EventAdmin {
 
 export interface StorageBreakdown {
   readonly FOTOS: number;
-  readonly 'VÍDEOS': number;
+  readonly VÍDEOS: number;
   readonly OTROS: number;
 }
 

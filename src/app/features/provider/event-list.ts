@@ -22,7 +22,7 @@ import { EventRow } from './event-row';
   `,
   styles: `
     :host {
-      display: block
+      display: block;
     }
   `,
 })

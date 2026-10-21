@@ -24,7 +24,20 @@ import { clockLabel, nowTime, weekdayDayMonth } from './date-format';
 const SAT_14_JUN_2025 = new Date(2025, 5, 14, 20, 41, 7);
 
 const WEEKDAY_TOKENS = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
-const MONTH_TOKENS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+const MONTH_TOKENS = [
+  'ENE',
+  'FEB',
+  'MAR',
+  'ABR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AGO',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DIC',
+];
 
 describe('nowTime', () => {
   it('renders a zero-padded 24-hour clock', () => {
@@ -78,7 +91,9 @@ describe('weekdayDayMonth', () => {
   });
 
   it('maps all twelve months to the three-letter uppercase tokens', () => {
-    const months = Array.from({ length: 12 }, (_, i) => weekdayDayMonth(new Date(2025, i, 15, 12, 0, 0)));
+    const months = Array.from({ length: 12 }, (_, i) =>
+      weekdayDayMonth(new Date(2025, i, 15, 12, 0, 0)),
+    );
 
     expect(months.map((m) => m.split(' ')[2])).toEqual(MONTH_TOKENS);
   });

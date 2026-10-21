@@ -1,5 +1,12 @@
 import { isPlatformBrowser } from '@angular/common';
-import { DestroyRef, Injectable, PLATFORM_ID, afterNextRender, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  PLATFORM_ID,
+  afterNextRender,
+  inject,
+  signal,
+} from '@angular/core';
 
 import { nowTime } from './date-format';
 import type { FeedItem, FeedResultClass } from './models';
@@ -60,7 +67,11 @@ export class FeedService {
 
     const roll = Math.random();
     const [label, cls]: readonly [string, FeedResultClass] =
-      roll < 0.86 ? ['VÁLIDO', 'fx-ok'] : roll < 0.96 ? ['RE-INGRESO', 'fx-warn'] : ['PASE DUPLICADO', 'fx-bad'];
+      roll < 0.86
+        ? ['VÁLIDO', 'fx-ok']
+        : roll < 0.96
+          ? ['RE-INGRESO', 'fx-warn']
+          : ['PASE DUPLICADO', 'fx-bad'];
 
     const item: FeedItem = {
       id: ++this.nextId,
