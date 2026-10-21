@@ -295,7 +295,9 @@ Code-line count **384** excluding comments/blank for the reviewed batch, **405**
 post-review follow-up (W1 role-spoofing regression + S4 neutral `data/event-scope.ts`) — a
 disclosed **5-line overage** of the 400 budget, test/type-only. `md5sum dev.db` identical
 before/after the integration suite. Recorded decisions: security cannot read guest/photo
-lists (design §5), events ordered by `start`, storage-less display fields synthesized.
+lists (design §5), events ordered by `start`, storage-less display fields synthesized
+(→ superseded for `used`/`max`/`br`: the API now omits them and the client resolves them
+from a display mock — see the display-state cleanup section in `apply-progress.md`).
 Boundary: writes and object-level by-ID rejection remain PR-2a.
 
 **Suggested work-unit commits:**

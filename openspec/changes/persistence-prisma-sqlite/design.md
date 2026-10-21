@@ -222,7 +222,12 @@ Key rules:
 - Companion scope for authorization resolves through `guest.eventId` (no denormalized
   `eventId` on Companion — data volume is trivial; avoid write-time invariants).
 - Counters (`PaseEvent.guests/max/used`) are **not stored** — they become client `computed()`
-  over fetched data (exploration: redefined as queries).
+  over fetched data (exploration: redefined as queries). **Resolved as:** `guests`/`photos` are
+  returned by the API as real row counts (`_count`); the storage counters (`used`/`max`/`br`)
+  have no server-side source at all, because the storage service does not exist yet (BR-16
+  keeps image bytes on an external vendor), so they resolve **client-side from a display
+  mock** holding the prototype's per-event figures — the API omits them and an event with no
+  fixture renders an honest `—`. See the display-state cleanup section in `apply-progress.md`.
 
 ## 4. Data-access boundary + SSR/hydration strategy
 
