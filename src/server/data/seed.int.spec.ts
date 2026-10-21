@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { seedDatabase } from '../../../prisma/seed';
 import { EVENTS, GUESTS, PHOTOS } from '../../app/core/seed-data';
+import { STORAGE_FIXTURES, storageFixture } from '../../app/core/storage-display';
 // Side-effect import: registers the harness hooks BEFORE this file's hooks. They
 // provision a per-file temp SQLite DB (mkdtemp + `prisma migrate deploy`) and reset
 // it before every test, so the spec never touches the developer's `dev.db` (design
@@ -130,6 +131,21 @@ describe('seedDatabase', () => {
         const assignment = assignments.find((a) => a.eventId === eventId && a.userId === user?.id);
         expect(assignment).toBeDefined();
       }
+    }
+  });
+
+  it('binds every seeded event to the storage figures of the very same event', async () => {
+    const events = await getPrisma().event.findMany({ orderBy: { id: 'asc' } });
+
+    // The client resolves the storage counters through an alias
+    // (`src/app/core/storage-display.ts`), because the seed derives the row id
+    // from the event ORDER (`ev-001`, `ev-002`, …). The REAL seeded ids are
+    // checked here: another id scheme would leave the client without figures,
+    // and another order would put one event's numbers on another.
+    for (const event of events) {
+      const seed = EVENTS.find((candidate) => candidate.name === event.name);
+      expect(seed, `unknown seeded event ${event.name}`).toBeDefined();
+      expect(storageFixture(event.id)).toEqual(STORAGE_FIXTURES[seed!.id]);
     }
   });
 
