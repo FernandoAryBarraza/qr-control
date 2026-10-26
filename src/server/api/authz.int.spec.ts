@@ -4,7 +4,8 @@ import { seedDatabase } from '../../../prisma/seed';
 // Side-effect import: registers the harness hooks (per-file temp SQLite + reset).
 import { getPrisma } from '../data/prisma-client';
 import { apiFetch } from '../testing/integration-harness';
-import { canReadEvent, isCallerRole, resolveEventScope } from './authz';
+import { canCreateEvent, canReadEvent, isCallerRole, resolveEventScope } from './authz';
+import type { CallerRole } from './authz';
 import { callerContext, resolveCallerContext } from './caller-context';
 
 // Deterministic seed IDs (prisma/seed.ts): provider, admin + first security of ev-001.
@@ -83,6 +84,16 @@ describe('authorization decisions', () => {
       true,
     ]);
     expect(isCallerRole('owner')).toBe(false);
+  });
+
+  // W5: pure table for canCreateEvent — event creation is the provider-only
+  // exception (BR-02), independent of any assignment.
+  it.each<[CallerRole, boolean]>([
+    ['provider', true],
+    ['admin', false],
+    ['security', false],
+  ])('canCreateEvent for a %s → %s', (role, expected) => {
+    expect(canCreateEvent({ userId: 'usr-001', role })).toBe(expected);
   });
 });
 

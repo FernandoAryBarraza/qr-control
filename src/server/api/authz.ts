@@ -31,3 +31,8 @@ export function canReadEvent(
   if (!ids.includes(eventId)) return false;
   return kind === 'event' || caller.role === 'admin';
 }
+
+/** BR-02: event creation is provider-only; the route validates the admin assignments. */
+export function canCreateEvent(caller: CallerContext): boolean {
+  return caller.role === 'provider';
+}

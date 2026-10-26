@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { PaseEvent, SecurityGuard } from '../../../app/core/models';
 import type { Prisma } from '../../../generated/prisma/client';
 import type { EventScope } from '../event-scope';
@@ -69,4 +70,42 @@ export async function assignedEventIds(userId: string): Promise<readonly string[
     select: { eventId: true },
   });
   return rows.map((row) => row.eventId);
+}
+
+/** Write contract for POST /api/events (BR-02). Display-only fields never enter it. */
+export interface EventWriteInput {
+  readonly name: string;
+  readonly start: Date;
+  readonly end: Date;
+  readonly retentionDays: number;
+  readonly note: string | null;
+  readonly status: string;
+  readonly admins: readonly string[];
+}
+
+/** Users that exist AND hold the admin role — the only valid creation assignments. */
+export async function existingAdminIds(ids: readonly string[]): Promise<readonly string[]> {
+  const users = await getPrisma().user.findMany({
+    where: { id: { in: [...ids] }, role: 'admin' },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+}
+
+/** Creates the event and its admin assignments atomically, then returns the read shape. */
+export async function createEvent(input: EventWriteInput): Promise<PaseEvent> {
+  const event = await getPrisma().event.create({
+    data: {
+      id: `ev-${randomUUID()}`,
+      name: input.name,
+      status: input.status,
+      start: input.start,
+      end: input.end,
+      retentionDays: input.retentionDays,
+      note: input.note,
+      assignments: { create: input.admins.map((userId) => ({ userId })) },
+    },
+    include: EVENT_INCLUDE,
+  });
+  return toPaseEvent(event);
 }

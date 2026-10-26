@@ -1,11 +1,18 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { DATA_PROVIDER } from '../data/config';
 import { getPrisma } from '../data/prisma-client';
-import { assignedEventIds, findEvent, listEvents } from '../data/repositories/events';
+import {
+  assignedEventIds,
+  createEvent,
+  existingAdminIds,
+  findEvent,
+  listEvents,
+} from '../data/repositories/events';
 import { listGuests } from '../data/repositories/guests';
 import { listPhotos } from '../data/repositories/photos';
-import { canReadEvent, resolveEventScope } from './authz';
+import { canCreateEvent, canReadEvent, resolveEventScope } from './authz';
 import { callerContext, callerOf } from './caller-context';
+import { parseEventInput } from './write-validation';
 
 export const apiRouter = Router();
 
@@ -21,6 +28,16 @@ apiRouter.get('/health', async (_req, res) => {
 /** Express 5 types `req.params` values as `string | string[]`; routes expect a scalar. */
 const pathId = (req: Request): string => String(req.params['id'] ?? '');
 
+// Generic 4xx payloads (spec req 3): a rejection never echoes row contents, and an
+// out-of-scope row is indistinguishable from a nonexistent one.
+const forbidden = (res: Response): void => {
+  res.status(403).json({ statusCode: 403, message: 'Forbidden' });
+};
+
+const badRequest = (res: Response): void => {
+  res.status(400).json({ statusCode: 400, message: 'Bad Request' });
+};
+
 // Event-scope guard (BR-03 / design §5): resolves the caller's assignments once and
 // rejects out-of-scope reads before any payload is composed. `content` narrows the
 // guest/photo routes to provider or the assigned admin; `event` allows any assigned
@@ -30,7 +47,7 @@ function eventAccess(kind: 'event' | 'content') {
     const caller = callerOf(res);
     const assigned = await assignedEventIds(caller.userId);
     if (!canReadEvent(caller, kind, pathId(req), assigned)) {
-      res.status(403).json({ statusCode: 403, message: 'Forbidden' });
+      forbidden(res);
       return;
     }
     next();
@@ -42,6 +59,30 @@ apiRouter.get('/events', callerContext, async (req, res) => {
   const caller = callerOf(res);
   const scope = resolveEventScope(caller, await assignedEventIds(caller.userId));
   res.json(await listEvents(scope));
+});
+
+// POST /api/events — provider only (BR-02); every event carries at least one admin.
+apiRouter.post('/events', callerContext, async (req, res) => {
+  const caller = callerOf(res);
+  if (!canCreateEvent(caller)) {
+    forbidden(res);
+    return;
+  }
+
+  const parsed = parseEventInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+
+  // The payload's `role: 'admin'` is not trusted: the stored role decides.
+  const knownAdmins = await existingAdminIds(parsed.value.admins);
+  if (knownAdmins.length !== parsed.value.admins.length) {
+    badRequest(res);
+    return;
+  }
+
+  res.status(201).json(await createEvent(parsed.value));
 });
 
 // GET /api/events/:id — provider any; admin/security assigned (BR-03).
