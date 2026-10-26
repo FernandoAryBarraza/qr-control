@@ -359,51 +359,84 @@ purge (4). **Dependencies:** PR-1c.
 
 Dependency position: `1a → 1b → 1c → 1d → 📍 2a → 2b → 3a → 3b → 4`
 
+**Sub-split decided at 2a.1 (2026-10-22): the forecast exceeds the 400-line budget, so 2a runs
+as two chained PRs (`stacked-to-main`, one 400-line budget each). Task numbers are NOT
+renumbered — the BR trace table and every spec reference stay valid.**
+
+- **2a-i — authz writes core: events + guests** (`POST /api/events`,
+  `POST /api/events/:id/guests`, `PATCH /api/guests/:id`, the shared object-level scope helper,
+  and its suite). Tasks: 2a.2, 2a.3, 2a.4 (guests half), 2a.5 (guests half), 2a.10.
+- **2a-ii — photos, members, toggles** (`POST /api/events/:id/photos`, `PATCH /api/photos/:id`,
+  `GET/POST /api/events/:id/members`, soft-toggle + no-delete coverage). Tasks: 2a.4 (photos
+  half), 2a.5 (photos half), 2a.6–2a.9, 2a.10.
+- Budget: each sub-PR targets ≤350 code lines (two/three suites + routes + repo functions).
+  If 2a-ii again forecasts >400, it splits the same way (members+toggles vs photos) before any
+  test is written. `size:exception` stays a fallback for an infeasible split only.
+- **Re-split after review (2026-10-23):** the 2a-i batch overran to 540 code lines, so it is
+  committed as two stacked work-unit PRs — **2a-i-A events** (≈400) and **2a-i-B guests**
+  (≈382), each ≤400, stacked-to-main, `size:exception` NOT consumed. Final verified counts:
+  782 code lines total (reviewer's code-only recount). The hunk-level A/B map
+  lives in `apply-progress.md` §PR-2a-i.
+- **S8 deferred to 2a-ii (before photos land):** object-level write scope is resolved in two
+  shapes today — the URL-addressed `writeAccess()` guard and the row-addressed check inside
+  `PATCH /api/guests/:id`. 2a-ii must fold both into ONE object-scope helper (reusing
+  `canWriteEvent`) before the photo routes add a third copy.
+
 - [ ] **2a.1** **Sub-split guard:** before writing tests, project the code-line count; if the
       PR is tracking >400 code lines, split into **2a-i** (authz enforcement + events +
       guests routes) and **2a-ii** (photos + members + toggles). ⚠️ If a clean sub-split
       proves infeasible, the pre-approved `size:exception` applies here (fallback only).
-- [ ] **2a.2** **Test-first (RED):** write `src/server/api/events-write.int.spec.ts` —
+      _(Unchecked after review: the up-front projection did not happen — 2a-i tracked 540
+      code lines before the A/B re-split was proposed. See the re-split note above.)_
+- [x] **2a.2** _[2a-i]_ **Test-first (RED):** write `src/server/api/events-write.int.spec.ts` —
       provider creates event with `start`/`end`/retention + ≥1 admin; `admin`/`security`
       creation attempts rejected 403-equivalent with no record created; provider creating
       without an admin rejected. _Traces: BR-02 → spec req 2 (all 3 scenarios)._
-- [ ] **2a.3** Implement `POST /api/events` (provider-only, ≥1 admin validation) in
+- [x] **2a.3** _[2a-i]_ Implement `POST /api/events` (provider-only, ≥1 admin validation) in
       `src/server/api/`. 🚧 after 2a.2 + PR-1c authz.
-- [ ] **2a.4** **Test-first (RED):** write the object-level suite
-      `src/server/api/scope.int.spec.ts` — admin of event A: (a) every write targeting an
+- [ ] **2a.4** _[2a-i guests; photos half in 2a-ii]_ **Test-first (RED):** write the object-level
+      suite `src/server/api/scope.int.spec.ts` — admin of event A: (a) every write targeting an
       event B entity rejected **by exact ID** with no data disclosed and no record changed;
       (b) reads return only event A data. Cover guests, photos, check-in attempts, and (as
       they land) QR paths via the same helpers. _Traces: BR-03, BR-04 → spec req 3 (scenarios
       3–4)._
-- [ ] **2a.5** Implement writes with scope resolution via each row's `eventId`:
-      `POST /api/events/:id/guests`, `PATCH /api/guests/:id` (status/active),
-      `POST /api/events/:id/photos`, `PATCH /api/photos/:id` (state/active) — all assigned-
-      admin only, object-level checks on standalone IDs.
-- [ ] **2a.6** **Test-first (RED):** write `src/server/api/members.int.spec.ts` — admin of
-      event A creates a `security` user scoped to A (usable as trusted context); provider
-      cannot create security/second-admin directly; provider CAN read permission holders for
-      any event. _Traces: BR-06 → spec req 5 (all 3 scenarios)._
-- [ ] **2a.7** Implement `GET/POST /api/events/:id/members` per the design §5 matrix. 🚧
-      after 2a.6.
-- [ ] **2a.8** **Test-first (RED):** write toggle scenarios in `src/server/api/toggles.int.spec.ts`
-      — admin deactivates a guest of own event → record persists with `active:false`; toggling
-      back restores previous state with all other fields unchanged; sibling rows unaffected;
-      cross-event toggle rejected; **any admin delete attempt (event or record) rejected with
-      records intact** (no admin-reachable DELETE route). _Traces: BR-13 → spec req 12 (all
-      3 scenarios) + spec req 11 scenario 3._
-- [ ] **2a.9** Verify the toggle/no-delete behavior of the implemented PATCH routes against
-      2a.8 (they may already be green from 2a.5 — close the RED/GREEN loop explicitly).
-- [ ] **2a.10** Run the PR verification gate (ground rule 2). Note in PR body: every
-      event-scoped endpoint now has a server-side rejection test (proposal success criterion 3
-      is validated again end-to-end in PR-4's sweep).
+- [ ] **2a.5** _[2a-i guests endpoints; photos half in 2a-ii]_ Implement writes with scope
+      resolution via each row's `eventId`: `POST /api/events/:id/guests`,
+      `PATCH /api/guests/:id` (status/active), `POST /api/events/:id/photos`,
+      `PATCH /api/photos/:id` (state/active) — all assigned-admin only, object-level checks on
+      standalone IDs.
+- [ ] **2a.6** _[2a-ii]_ **Test-first (RED):** write `src/server/api/members.int.spec.ts` —
+      admin of event A creates a `security` user scoped to A (usable as trusted context);
+      provider cannot create security/second-admin directly; provider CAN read permission
+      holders for any event. _Traces: BR-06 → spec req 5 (all 3 scenarios)._
+- [ ] **2a.7** _[2a-ii]_ Implement `GET/POST /api/events/:id/members` per the design §5
+      matrix. 🚧 after 2a.6.
+- [ ] **2a.8** _[2a-ii]_ **Test-first (RED):** write toggle scenarios in
+      `src/server/api/toggles.int.spec.ts` — admin deactivates a guest of own event → record
+      persists with `active:false`; toggling back restores previous state with all other
+      fields unchanged; sibling rows unaffected; cross-event toggle rejected; **any admin
+      delete attempt (event or record) rejected with records intact** (no admin-reachable
+      DELETE route). _Traces: BR-13 → spec req 12 (all 3 scenarios) + spec req 11 scenario 3._
+- [ ] **2a.9** _[2a-ii]_ Verify the toggle/no-delete behavior of the implemented PATCH routes
+      against 2a.8 (they may already be green from 2a.5 — close the RED/GREEN loop explicitly).
+- [ ] **2a.10** _[gate for both sub-PRs]_ Run the PR verification gate (ground rule 2). Note in
+      PR body: every event-scoped endpoint now has a server-side rejection test (proposal
+      success criterion 3 is validated again end-to-end in PR-4's sweep).
+      _(Unchecked after review: the gates are green for 2a-i, but 2a.10 also covers 2a.4/2a.5,
+      which stay open until the photos half lands in 2a-ii — re-run the gate at the end of
+      2a-ii.)_
 
-**Suggested work-unit commits:**
+**Suggested work-unit commits — 2a-i:**
 
-1. `test(api): add provider-only event creation and object-level scope specs` (2a.2, 2a.4)
-2. `feat(api): add event and guest write endpoints with scope enforcement` (2a.3, 2a.5)
+1. `test(api): add provider-only event creation and object-level scope specs` (2a.2, 2a.4 guests)
+2. `feat(api): add event and guest write endpoints with scope enforcement` (2a.3, 2a.5 guests)
+
+**Suggested work-unit commits — 2a-ii:**
+
 3. `feat(api): add event members endpoints for admin-created lower roles` (2a.6–2a.7)
 4. `test(api): add admin soft-toggle and no-delete specs` + wire any missing toggle behavior
    (2a.8–2a.9)
+5. `feat(api): add photo write endpoints with object-level scope enforcement` (2a.4–2a.5 photos)
 
 ---
 

@@ -4,7 +4,13 @@ import { seedDatabase } from '../../../prisma/seed';
 // Side-effect import: registers the harness hooks (per-file temp SQLite + reset).
 import { getPrisma } from '../data/prisma-client';
 import { apiFetch } from '../testing/integration-harness';
-import { canCreateEvent, canReadEvent, isCallerRole, resolveEventScope } from './authz';
+import {
+  canCreateEvent,
+  canReadEvent,
+  canWriteEvent,
+  isCallerRole,
+  resolveEventScope,
+} from './authz';
 import type { CallerRole } from './authz';
 import { callerContext, resolveCallerContext } from './caller-context';
 
@@ -94,6 +100,20 @@ describe('authorization decisions', () => {
     ['security', false],
   ])('canCreateEvent for a %s → %s', (role, expected) => {
     expect(canCreateEvent({ userId: 'usr-001', role })).toBe(expected);
+  });
+
+  // W4: canWriteEvent needs BOTH halves covered independently. The
+  // assigned-provider/security rows prove the ROLE half (an implementation that
+  // dropped the role check would return true for them); the admin rows prove the
+  // ASSIGNMENT half. The route-level provider test passes on the assignment half
+  // alone (the provider is never assigned), so it cannot protect the role check.
+  it.each<[string, CallerRole, readonly string[], boolean]>([
+    ['provider assigned to the event', 'provider', ['ev-001'], false],
+    ['security assigned to the event', 'security', ['ev-001'], false],
+    ['admin without the assignment', 'admin', ['ev-002'], false],
+    ['admin with the assignment', 'admin', ['ev-001'], true],
+  ])('canWriteEvent: %s → %s', (_label, role, ids, expected) => {
+    expect(canWriteEvent({ userId: 'usr-002', role }, 'ev-001', ids)).toBe(expected);
   });
 });
 

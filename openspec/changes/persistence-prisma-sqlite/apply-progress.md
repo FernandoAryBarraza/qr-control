@@ -836,3 +836,308 @@ individually in a throwaway copy.
   event **order** the alias silently mis-binds; if the id **scheme** changes the display falls back
   to the em dash. Both are covered by tests. The systemic fix — one id space for the same records
   — is still deferred.
+
+---
+
+# PR-2a-i — authz writes core: events + guests (tasks 2a.2, 2a.3, 2a.4/2a.5 guests half, 2a.10)
+
+Continuation batch. Nothing staged or committed (orchestrator owns git). Working tree carries
+only the 2a-i footprint; `prisma/**`, the schema and the Angular feature/client code are
+untouched.
+
+**TDD account (corrected after the 2026-10-23 adversarial review — the previous "executed
+under strict TDD" claim for this batch was FALSE):** the 2a.2 suite (`events-write`) WAS
+written first against the absent `POST /api/events` (RED 11/11 on 404, genuinely captured),
+but the 2a.4/2a.5 guest work was implemented BEFORE its spec, producing a spurious green; the
+batch then reverted the guest write path and the `active` read mapping and re-captured the
+RED (9 failures reproduced — verified non-tautological via faithful revert). The cycle cannot
+be replayed honestly once the implementation exists.
+**TDD exception approved by maintainer (user decision, 2026-10-23): cycle cannot be replayed
+honestly once implementation exists; RED captures verified non-tautological via faithful
+revert (9 failures reproduced).**
+
+## Status
+
+| Task                                            | Status    | Verification                                                                                                                                                                                                          |
+| ----------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2a.2 `events-write.int.spec.ts` (RED→GREEN)     | ✅        | RED **11/11 failed** (`expected 404 to be 201/403/400/401` — route absent). GREEN **11/11**.                                                                                                                          |
+| 2a.3 `POST /api/events`                         | ✅        | Provider-only creation; ≥1 admin validated against `User` rows (`role` from the DB); event + assignments created in one Prisma `create`. Reuses the read mapper, so the response has no display-only fields.          |
+| 2a.4 object-level scope suite — **guests half** | 🚧 half   | `scope.int.spec.ts` **9/9 green** (exact-ID rejection, unknown-vs-foreign parity, no record change, own-event reads). **Photos half stays open for 2a-ii**; task checkbox intentionally unchecked.                    |
+| 2a.5 guest writes — **guests half**             | 🚧 half   | `POST /api/events/:id/guests` (201) and `PATCH /api/guests/:id` (status/active) are assigned-admin only; object scope resolves from the row's own `eventId`. Photo endpoints stay open for 2a-ii; checkbox unchecked. |
+| 2a.10 PR verification gate                      | 🚧 (2a-i) | All gates green for 2a-i (table below + the review-fix batch section). The checkbox stays OPEN: 2a.10 also covers 2a.4/2a.5, which close only at the end of 2a-ii.                                                    |
+
+## Strict TDD evidence (RED → GREEN)
+
+| Task        | Test file                                 | Layer       | RED evidence                                                                                                                                                                                                                                                                                                                               | Why it failed                                                                                                                              | GREEN evidence         |
+| ----------- | ----------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| 2a.2        | `src/server/api/events-write.int.spec.ts` | Integration | `Tests 11 failed (11)` — every case `404`                                                                                                                                                                                                                                                                                                  | `POST /api/events` did not exist                                                                                                           | `Tests 11 passed (11)` |
+| 2a.4 guests | `src/server/api/scope.int.spec.ts`        | Integration | First attempt passed spuriously: the guest write path had been implemented in the 2a.3 step, before this spec. The batch **reverted the guest write path and the `active` read mapping** and re-ran: `Tests 9 failed (9)` — `expected 404 to be 200/403/201/400` and, for reads, `expected false to be true` (no `active` in the payload). | Guest routes absent; reads did not expose `active`. **The earlier order was a TDD violation and was discarded, not reported as evidence.** | `Tests 9 passed (9)`   |
+| 2a.5 guests | same                                      | Integration | Covered by the 2a.4 RED (all nine cases failed for the right reason)                                                                                                                                                                                                                                                                       | Routes and mapper absent                                                                                                                   | `Tests 9 passed (9)`   |
+| 2a.3        | same                                      | Integration | Covered by the 2a.2 RED (all eleven cases failed on `404`)                                                                                                                                                                                                                                                                                 | Route absent                                                                                                                               | `Tests 11 passed (11)` |
+
+**Triangulation.** Event creation: explicit retention + explicit schedule; defaults
+(`retentionDays` 365, `status: 'upcoming'`, `note: null`) with two admin assignments; admin and
+security rejections; no-admin rejection; five invalid-payload variants (blank name, unparseable
+start, end ≤ start, unknown admin user, non-admin assignment); unauthenticated rejection. Guest
+scope: partial PATCH merge (`status`+`active`, then `active` only), foreign-by-exact-ID rejection
+with full-row equality before/after, foreign-vs-nonexistent response parity, own-event creation
+with a companion, cross-event creation rejection, security/provider write rejection, invalid
+status rejection, and own-vs-foreign reads with a DB-derived id set.
+
+## Verification gates (actual output)
+
+| Gate                                         | Result                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| `npm test -- --watch=false`                  | **11 files / 144 tests passed** (unchanged baseline)                    |
+| `npm run test:int`                           | **8 files / 53 tests passed** (33 baseline + 11 events-write + 9 scope) |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                              |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                              |
+| `npm run build`                              | exit **0** — "Prerendered 1 static route", no NG05xx                    |
+| `./node_modules/.bin/prettier --check .`     | **All matched files use Prettier code style** (0 unformatted)           |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                     |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank)
+
+| Unit                                   | Lines   |
+| -------------------------------------- | ------- |
+| `api/events-write.int.spec.ts` (new)   | 115     |
+| `api/scope.int.spec.ts` (new)          | 133     |
+| `api/write-validation.ts` (new)        | 103     |
+| `api/index.ts` (diff, added code)      | 69      |
+| `api/app.ts` (diff)                    | 8       |
+| `api/authz.ts` (diff)                  | 10      |
+| `data/repositories/events.ts` (diff)   | 33      |
+| `data/repositories/guests.ts` (diff)   | 68      |
+| `app/core/models.ts` (diff, `active?`) | 1       |
+| **Total**                              | **540** |
+
+**⚠️ Over the 400 budget by 140 code lines.** The forecast for 2a-i was ≤350; the suites alone are
+248 lines because the two required scenario sets became 20 integration tests. Coverage was not
+trimmed to hit the number. The split boundary is already proven by the RED run: the guest write
+path was reverted and `events-write` stayed green while `scope` failed with 404s, so the batch is
+two independently-green work units:
+
+- **2a-i-A events** (events-write spec + event validation + `EventWriteInput`/`createEvent`/
+  `existingAdminIds` + `POST /api/events` + `canCreateEvent` + JSON parser): **≈246** code lines.
+- **2a-i-B guests** (scope spec + guest validation + guest write functions + `active` mapping +
+  `POST /api/events/:id/guests` + `PATCH /api/guests/:id` + `canWriteEvent`): **≈294** code lines,
+  on top of A.
+
+Recommendation to the orchestrator: land 2a-i as **two stacked work-unit PRs** (A → B) instead of
+one 540-line PR. Do **not** consume `size:exception`; no further splitting of the work itself is
+needed, only of the PR boundary.
+
+## Decisions (2a-i)
+
+1. **Event creation body:** `{ name, start, end, retentionDays?, note?, status?, admins: [{ userId,
+role: 'admin' }] }`. `status` accepts the persisted vocabulary (`upcoming|active|finished`) and
+   defaults to `upcoming`; `retentionDays` defaults to 365. The API returns the **read** shape via
+   the existing mapper: no `cd`, `used`, `max`, `br`, admin contact or guard details.
+2. **Admin assignments are validated twice:** the payload must declare `role: 'admin'`, and each
+   `userId` must exist with the stored `admin` role (`existingAdminIds`). The client never decides
+   the role. A provider therefore cannot smuggle a security assignment into event creation.
+3. **IDs are generated server-side** (`ev-<uuid>`, `g-<uuid>`, `c-<uuid>`). The deterministic seed
+   ids are unchanged; no client-supplied id is accepted.
+4. **Guest write contract:** `name` required; `email`/`phone`/`note` default to `''`; `table` to 0;
+   `status` to `planned`; `party` to `[]` (companions are created in the same transaction).
+   `PATCH /api/guests/:id` accepts only `status` and/or `active` — no delete, no event move.
+5. **`active` is now part of the read shape as an optional field** (`Guest.active?`), closing the
+   S5 handoff from PR-1c without rewriting the bundled fixtures. The API always sends the persisted
+   value; the client does not consume it yet. This is a type-only addition, no client behavior.
+6. **Object-level writes never trust a client event id.** `PATCH /api/guests/:id` loads the row's
+   own `eventId` and then checks `canWriteEvent`. A foreign row and a nonexistent row return the
+   same `{ statusCode: 403, message: 'Forbidden' }`; the suite asserts response parity.
+7. **Write roles follow design §5:** guests are assignable-admin writes. `provider` and `security`
+   get 403 on guest writes, even though the provider can read them. Event creation is the
+   provider-only exception (BR-02).
+8. **App-layer validation** lives in `api/write-validation.ts` as pure `ParseResult` parsers (no
+   thrown errors, no status enums in Prisma). `express.json()` is mounted once in
+   `createApiApp()`, and the terminal error handler maps body-parser 400s to the generic
+   `Bad Request` payload so parser details never leak.
+9. **2a.4/2a.5 stay unchecked** because the photos half is pending; the guests half is recorded
+   here. **2a.10 stays open** for this batch and must be re-run at the end of 2a-ii.
+
+## Handoff to PR-2a-ii
+
+**What is left:** `POST /api/events/:id/photos`, `PATCH /api/photos/:id` (state/active), the
+members endpoints (2a.6–2a.7), and the toggle/no-delete suite (2a.8–2a.9). 2a.4 and 2a.5 close
+only when the photos half lands.
+
+**What to extend in `scope.int.spec.ts`:** the marked block at the bottom is the insertion point.
+Add the same assertions for photos: own-photo `PATCH` succeeds; an admin of event A patching a
+photo of event B by exact id gets the byte-identical 403 and the row is unchanged; an unknown
+photo id is indistinguishable from a foreign one; `POST /api/events/:id/photos` is rejected for a
+foreign event, for security and for the provider, with no row created; reads stay own-event only.
+Reuse `canWriteEvent` and the `writeAccess()` guard — do not add a second scope mechanism.
+
+**Status parsers:** `write-validation.ts` already owns `isGuestStatus`; add the photo predicate
+(`pending|approved|rejected`) there rather than casting in the new route (S3 from PR-1c). Note
+`active` is already on the `Guest` read shape; add the equivalent to `EventPhoto` when the photo
+toggle lands.
+
+**2a-ii forecast:** photos half ≈180 code lines (scope extension ~70 + validation/repo/routes
+~110); members + toggles ≈255 (members spec ~90 + route/repo ~75 + toggle specs ~90). Combined
+≈435, i.e. **again over 400** → split as **2a-ii-a photos** and **2a-ii-b members+toggles**, as
+tasks.md already permits. Check-in/QR writes stay in PR-3b and join through `canWriteEvent`/the
+scope helper.
+
+## Files touched (2a-i, uncommitted)
+
+- **New:** `src/server/api/events-write.int.spec.ts`, `src/server/api/scope.int.spec.ts`,
+  `src/server/api/write-validation.ts`
+- **Modified:** `src/server/api/index.ts`, `src/server/api/app.ts`, `src/server/api/authz.ts`,
+  `src/server/data/repositories/events.ts`, `src/server/data/repositories/guests.ts`,
+  `src/app/core/models.ts` (`active?` only), `openspec/.../tasks.md` (2a.2, 2a.3, 2a.10), this file
+- **Untouched:** `prisma/**` (no schema change, no migration), `src/app/**` feature/client code,
+  `seed-data.ts`, `event-display.ts`, `src/server.ts`, the Angular SSR bundle
+
+---
+
+# PR-2a-i — adversarial-review fix batch (required fixes 1–8 + S2/S7)
+
+A fresh-context adversarial review of the 2a-i batch returned **BLOCK** (3 criticals, 6
+warnings, 8 suggestions). This section records the fixes applied before commit; the A/B
+re-split map at the bottom is the orchestrator's commit-split deliverable. Git state
+unchanged: nothing staged or committed; the working tree carries the enlarged 2a-i footprint.
+
+## Status
+
+| Review item             | Fix applied                                                                                                                                                                                                                                       | Verification                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| C1 stored-role coverage | New test: payload `role:'admin'` on an existing security user → 400; new mixed-payload test for the known-id half                                                                                                                                 | mutation M1/M2 below — each half of `existingAdminIds` guarded alone       |
+| W5 + W4 pure tables     | `canCreateEvent` + `canWriteEvent` `it.each` tables in `authz.int.spec.ts` (pure; the unit builder excludes `src/server/**`, so the int runner owns them)                                                                                         | mutation M3/M4 below — role half and assignment half guarded independently |
+| C2 false TDD claim      | §PR-2a-i header corrected: batch was NOT strict TDD; TDD exception recorded (maintainer decision, 2026-10-23)                                                                                                                                     | this section                                                               |
+| C3 tasks.md honesty     | 2a.1 + 2a.10 unchecked with corrected notes; A/B re-split note added                                                                                                                                                                              | `openspec/.../tasks.md`                                                    |
+| W1 + S4 negative tests  | malformed JSON → generic 400 (events + guests), body >102400 B → 413, unauthenticated guest writes → 401, unknown-field mass assignment ignored                                                                                                   | mutation M5/M6/M11/M12 below                                               |
+| W2 int4 bounds          | `MAX_RETENTION_DAYS = 3650`, `MAX_TABLE = 999`; exact review overflow values (`999999999999`, `2147483648`) tested                                                                                                                                | mutation M7/M8 below                                                       |
+| W3 strict date parsing  | explicit UTC offset required; calendar round-trip (`2026-02-30T10:00:00Z` → 400)                                                                                                                                                                  | mutation M9/M10 below                                                      |
+| W6 error-log truncation | `console.error` logs `{ status, type, message }` only — never the error object (`err.body` carries the raw request body; the parse message embeds a snippet); 4xx logs the same generic message as the response, 5xx logs the server-side cause   | genuine RED→GREEN below (canary test)                                      |
+| S2 `"done"` alias       | `parseEventInput` maps `done → finished` BEFORE validating the persisted vocabulary (the previous check rejected `done` outright)                                                                                                                 | genuine RED→GREEN below                                                    |
+| S7 `optionalText` trims | whitespace-only optional guest fields collapse to `''`; padded values are trimmed                                                                                                                                                                 | genuine RED→GREEN below                                                    |
+| S1                      | documented here: duplicate `userId` entries in `admins` are **intentionally deduplicated** (`parseAdmins` push guard) — repeats neither fail the ≥1-admin check nor create duplicate assignment rows                                              | no code change                                                             |
+| S3                      | documented here: optionality asymmetry is **intentional** — absent/null optional TEXT (email/phone/note) → `''`, but a present-but-null/non-array `party` → 400: text absence is data, party absence would silently change the guest's companions | no code change                                                             |
+| S5, S6                  | out of scope for 2a-i                                                                                                                                                                                                                             | —                                                                          |
+| S8                      | object-scope helper unification deferred to 2a-ii (before photos land) — noted in `tasks.md`                                                                                                                                                      | `openspec/.../tasks.md`                                                    |
+
+## TDD evidence (this batch)
+
+| Behaviour               | RED                                                                                                                                      | GREEN               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| S2 `"done"` input alias | observed pre-implementation: `Tests 2 failed \| 64 passed (66)` — `expected 201 to be 400` (parser rejected `done`)                      | 66/66 after the fix |
+| S7 `optionalText` trims | same run: `expected '  recortada@example.com  ' to be 'recortada@example.com'` (untrimmed/whitespace-only values persisted)              | 66/66 after the fix |
+| W6 sanitized error log  | `expected '[api] Unhandled error:\n{"expose":true…{"body":"{\"name\": \"canary-leak@example.com\"…"}` — the full request body in the log | 81/81 after the fix |
+
+S2/S7 and W6 are genuine behavioural changes: the RED was captured before the implementation
+existed (S2/S7 were left red by the previous session; W6's canary test failed on the logging
+branch). Everything else in this batch is coverage/guarding of already-green behaviour and was
+verified by **mutation testing** instead:
+
+## Mutation-verification (coverage-only specs, 12/12 mutants killed)
+
+Each mutant: precise literal replacement → targeted `vitest run` → the named test must go RED
+→ restore (byte-identical restore verified with `cmp` for all 5 files).
+
+| #   | Mutant (guard weakened)                               | Expected RED test killed                                                                       |
+| --- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| M1  | `existingAdminIds` drops `role: 'admin'`              | `rejects an assignment whose stored role is not admin` (1 failed)                              |
+| M2  | `existingAdminIds` drops `id: { in: … }`              | `rejects an unknown id mixed into otherwise-valid admin assignments` (5 failed incl. that one) |
+| M3  | `canWriteEvent` drops the role half                   | W4 table — `provider/security assigned to the event → false` rows (2 failed)                   |
+| M4  | `canCreateEvent` accepts admins (`!== 'security'`)    | W5 table — `admin → false` row (1 failed)                                                      |
+| M5  | the 400 branch leaks the parser message               | both `answers a malformed JSON body with a generic 400` tests (events + guests) (2 failed)     |
+| M6  | `express.json()` limit lifted to 10 MB                | `rejects a body over the JSON parser limit with 413` (1 failed)                                |
+| M7  | `retentionDays` upper bound removed                   | `rejects an int-unsafe retentionDays (999999999999)` (3 failed)                                |
+| M8  | `table` upper bound removed                           | `rejects an int-unsafe table value (2147483648)` (3 failed)                                    |
+| M9  | UTC offset made optional in the ISO regex             | `rejects a naive datetime without offset` (1 failed)                                           |
+| M10 | calendar round-trip check disabled                    | `rejects an impossible calendar date` (`2026-02-30T10:00:00Z` → 201) (2 failed)                |
+| M11 | `PATCH /api/guests/:id` loses `callerContext`         | `rejects unauthenticated a guest patch with 401` (6 failed)                                    |
+| M12 | guest-create route trusts a client-supplied `eventId` | `ignores mass-assignment attempts (id/eventId/active) on creation` (1 failed)                  |
+
+Campaign script: `/tmp/opencode/mutation-campaign.sh` (backups in `/tmp/opencode/mut-backups/`).
+The malformed-JSON log test also documents WHY the W6 fix is needed: `JSON.stringify` of a
+body-parser error exposes `body` (the raw payload) and `String(err)` exposes the parse message.
+
+## Verification gates (actual output, after the fix batch)
+
+| Gate                                         | Result                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run test:unit`                          | **11 files / 144 tests passed** (unchanged — no unit file touched)                           |
+| `npm run test:int`                           | **8 files / 82 tests passed** (53 baseline + 11→25 events-write + 9→17 scope + authz tables) |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                                                   |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                                                   |
+| `npm run build`                              | exit **0** — "Prerendered 1 static route", no NG05xx                                         |
+| `./node_modules/.bin/prettier --check .`     | 0 unformatted files                                                                          |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                                          |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank — chain metric)
+
+| Unit                                   | 2a-i baseline | after fixes | Δ    |
+| -------------------------------------- | ------------- | ----------- | ---- |
+| `api/events-write.int.spec.ts` (new)   | 115           | 223         | +108 |
+| `api/scope.int.spec.ts` (new)          | 133           | 200         | +67  |
+| `api/write-validation.ts` (new)        | 103           | 129         | +26  |
+| `api/index.ts` (diff)                  | 69            | 69          | 0    |
+| `api/app.ts` (diff)                    | 8             | 26          | +18  |
+| `api/authz.ts` (diff)                  | 10            | 10          | 0    |
+| `api/authz.int.spec.ts` (diff)         | 0             | 17          | +17  |
+| `data/repositories/events.ts` (diff)   | 33            | 33          | 0    |
+| `data/repositories/guests.ts` (diff)   | 68            | 68          | 0    |
+| `app/core/models.ts` (diff, `active?`) | 1             | 1           | 0    |
+| **Total**                              | **540**       | **776**     | +236 |
+
+## A/B split map (stacked-to-main, no `size:exception`, both ≤400)
+
+**A — events ≈ 396 code lines** and **B — guests ≈ 376 code lines**, stacked A → B.
+The split boundary is proven twice: by the recorded 2a.4 revert-RED (events-write stayed
+green while scope failed 404) and by mutations M1/M2 (events repo) vs M11/M12 (guest routes).
+
+### A — events (land first; independently green)
+
+- `src/server/api/events-write.int.spec.ts` — whole file (**223**)
+- `src/server/api/write-validation.ts` — A region only: `ParseResult`/`FAIL`, `isRecord`,
+  `text`, `ISO_DATETIME`/`date` (W3), `EVENT_STATUSES`, `DEFAULT_EVENT_STATUS`,
+  `DEFAULT_RETENTION_DAYS`, `MAX_RETENTION_DAYS`, `parseAdmins`, `parseEventInput` (S2) (**74**)
+- `src/server/api/index.ts` — A hunks: `createEvent`/`existingAdminIds` + `parseEventInput` +
+  `canCreateEvent` import extensions, `forbidden`/`badRequest` helpers, the `eventAccess`
+  refactor to `forbidden(res)`, the whole `POST /api/events` route (**≈31**)
+- `src/server/api/app.ts` — whole file: `express.json()` mount, generic-400 message branch,
+  W6 sanitized error log (**26**)
+- `src/server/api/authz.ts` — `canCreateEvent` only (**3**)
+- `src/server/api/authz.int.spec.ts` — the W5 `canCreateEvent` table + the `canCreateEvent`
+  import extension (**≈6**)
+- `src/server/data/repositories/events.ts` — `EventWriteInput`, `existingAdminIds`,
+  `createEvent`, `randomUUID` import (**33**)
+- `src/app/core/models.ts` — **NOT in A** (the only models change is `Guest.active?` → B)
+
+### B — guests (stacked on A)
+
+- `src/server/api/scope.int.spec.ts` — whole file (**200**)
+- `src/server/api/write-validation.ts` — B region: `MAX_TABLE`, `DEFAULT_GUEST_STATUS`,
+  `GUEST_STATUSES`, `optionalText` (S7), `isGuestStatus`, `parseParty`, `parseGuestInput`,
+  `parseGuestPatch`, the `GuestWriteInput`/`GuestPatchInput` type import (**55**)
+- `src/server/api/index.ts` — B hunks: `createGuest`/`guestEventId`/`updateGuest` +
+  `parseGuestInput`/`parseGuestPatch` + `canWriteEvent` import extensions, `writeAccess()`,
+  `POST /api/events/:id/guests`, `PATCH /api/guests/:id` (**≈34**)
+- `src/server/api/authz.ts` — `canWriteEvent` (**7**)
+- `src/server/api/authz.int.spec.ts` — the W4 `canWriteEvent` table + import extension (**≈11**)
+- `src/server/data/repositories/guests.ts` — whole diff (`Guest.active` mapping,
+  `GuestWriteInput`/`GuestPatchInput`, `createGuest`/`guestEventId`/`updateGuest`) (**68**)
+- `src/app/core/models.ts` — `Guest.active?` (**1**)
+
+### Shared-file hunk ownership + A-green hazards (verify A in a scratch worktree)
+
+1. **`index.ts` three shared import lines** (events repo, authz, write-validation): A lands the
+   line with the A symbols (`createEvent, existingAdminIds`, `canCreateEvent`, `parseEventInput`);
+   B extends the SAME line with the guest symbols. Stacked diffs, normal conflicts.
+2. **A must NOT carry `import type { GuestPatchInput, GuestWriteInput }`** in
+   `write-validation.ts` (those types are B-only) — with B's files absent this import breaks
+   `tsc -p tsconfig.spec.json`.
+3. **A must not mount the guest routes or `writeAccess()`** in `index.ts`; with B absent, the
+   A tree contains no reference to `createGuest`/`guestEventId`/`updateGuest`/`canWriteEvent`.
+4. **`models.ts` and `guests.ts` stay untouched in A**: no A test or route reads `Guest.active`
+   (the pre-1c `listGuests` read path is sufficient).
+5. **`app.ts` is wholly A** (parser + generic-400 + W6 log): the malformed-JSON/413/W6 tests
+   live in the A suite (`events-write`); the scope spec's malformed-JSON test is B and passes
+   against A's `app.ts` unchanged.
+6. Scratch-worktree verification for A: apply A only → `npm run test:unit` (144),
+   `npm run test:int` (events-write 25 + all pre-existing files; scope spec absent),
+   `npx tsc -p tsconfig.app.json`, `npx tsc -p tsconfig.spec.json`, `npm run build`.

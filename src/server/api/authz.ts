@@ -36,3 +36,12 @@ export function canReadEvent(
 export function canCreateEvent(caller: CallerContext): boolean {
   return caller.role === 'provider';
 }
+
+/** BR-03/BR-04: event writes belong to the event's own admin. Provider/security are read-only. */
+export function canWriteEvent(
+  caller: CallerContext,
+  eventId: string,
+  ids: readonly string[],
+): boolean {
+  return caller.role === 'admin' && ids.includes(eventId);
+}

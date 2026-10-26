@@ -20,6 +20,11 @@ export interface Guest {
   readonly table: number;
   readonly party: readonly PartyMember[];
   readonly note: string;
+  /**
+   * BR-13 soft toggle. Optional because the bundled fixtures predate it; the
+   * API always sends the persisted value on guest writes and reads.
+   */
+  readonly active?: boolean;
 }
 
 /** A single scannable credential. Code for companions is `P-001·A1`. */
