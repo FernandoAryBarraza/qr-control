@@ -45,3 +45,19 @@ export function canWriteEvent(
 ): boolean {
   return caller.role === 'admin' && ids.includes(eventId);
 }
+
+/**
+ * S8: the ONE object-scope decision shared by every write route (event-addressed
+ * and row-addressed). `eventId` is the object's owning event; `null` means the
+ * object does not exist and is denied for every caller — a nonexistent object
+ * stays indistinguishable from a foreign one (spec req 3, scenario 3). The route
+ * layer (`requireObjectScope` in api/index.ts) maps every denial to the same
+ * byte-identical 403; no caller/assignment combination can allow a null event id.
+ */
+export function canWriteObject(
+  caller: CallerContext,
+  eventId: string | null,
+  ids: readonly string[],
+): boolean {
+  return eventId !== null && canWriteEvent(caller, eventId, ids);
+}

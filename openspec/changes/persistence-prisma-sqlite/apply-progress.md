@@ -1017,7 +1017,7 @@ unchanged: nothing staged or committed; the working tree carries the enlarged 2a
 | S1                      | documented here: duplicate `userId` entries in `admins` are **intentionally deduplicated** (`parseAdmins` push guard) — repeats neither fail the ≥1-admin check nor create duplicate assignment rows                                              | no code change                                                             |
 | S3                      | documented here: optionality asymmetry is **intentional** — absent/null optional TEXT (email/phone/note) → `''`, but a present-but-null/non-array `party` → 400: text absence is data, party absence would silently change the guest's companions | no code change                                                             |
 | S5, S6                  | out of scope for 2a-i                                                                                                                                                                                                                             | —                                                                          |
-| S8                      | object-scope helper unification deferred to 2a-ii (before photos land) — noted in `tasks.md`                                                                                                                                                      | `openspec/.../tasks.md`                                                    |
+| S8                      | object-scope helper unification — **executed 2026-10-27 as 2a-ii pre-work** (before photos land) — see §S8 below                                                                                                                                  | §S8 below (helper + 8-row table + 6 mutations)                             |
 
 ## TDD evidence (this batch)
 
@@ -1141,3 +1141,54 @@ green while scope failed 404) and by mutations M1/M2 (events repo) vs M11/M12 (g
 6. Scratch-worktree verification for A: apply A only → `npm run test:unit` (144),
    `npm run test:int` (events-write 25 + all pre-existing files; scope spec absent),
    `npx tsc -p tsconfig.app.json`, `npx tsc -p tsconfig.spec.json`, `npm run build`.
+
+## S8 — object-scope helper unification (executed 2026-10-27 as 2a-ii pre-work)
+
+The one deferred 2a-i review item, executed on the clean tree at `128f778` BEFORE photos
+(PR-2a-ii) could add a third object-scope decision site. Strict TDD, **zero existing spec
+edits** (events-write 25, scope 17, authz 7 pass unmodified).
+
+### What changed (3 paths, ≈37 code lines added / ≈17 removed)
+
+| File                                      | Change                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/server/api/authz.ts`                 | **+** pure decision `canWriteObject(caller, eventId: string \| null, ids)` = `eventId !== null && canWriteEvent(...)`: the ONE object-scope decision; a `null` owning event (nonexistent object) is denied for every caller, keeping nonexistent ≡ foreign byte-identical (spec req 3, scenario 3)                                                                                                                                           |
+| `src/server/api/index.ts`                 | **±** middleware factory `requireObjectScope(resolveEventId)` replaces BOTH mechanisms (the `writeAccess()` factory and the inline `PATCH /guests/:id` scope block). Two instances: `eventWriteScope` (URL event id) / `guestRowWriteScope` (the row's `eventId` via `guestEventId`). Check order preserved: caller → resolve object → assignments → decision → same `forbidden(res)` 403; the PATCH handler now starts at `parseGuestPatch` |
+| `src/server/api/object-scope.int.spec.ts` | **NEW** — pure decision table (8 rows, W4/W5 style): 4 EXISTENCE rows (null × role × assignment), 2 ROLE, 1 ASSIGNMENT, 1 baseline. Pins the entire scope decision the 2a-ii photo route must reuse                                                                                                                                                                                                                                          |
+
+### TDD + mutation evidence (6/6 restores cmp-verified byte-identical)
+
+- **RED first:** the new table before the helper existed — `8 failed | 82 passed (90)`,
+  `canWriteObject is not a function` (every pre-existing suite green). **GREEN:** after the
+  `authz.ts` addition → 90/90; the call-site refactor then stayed green with no spec changes
+  (pure behaviour-preserving move).
+
+| #    | Mutant (one guard half dropped)                        | Observed                                                                                                                                                                                                                                                                                     |
+| ---- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S8-1 | `canWriteObject` drops `eventId !== null &&` (literal) | **killed by BOTH tsc gates** (`TS2345`: `string \| null` not assignable to `string`); int alone survives (esbuild skips types) → see S8-2                                                                                                                                                    |
+| S8-2 | S8-1 + `as string` cast (forced compile)               | **survives 25/25 — runtime-equivalent mutant**: `assignedEventIds` is string-only by construction, so `ids.includes(null)` is always false, and both halves funnel to the same byte-identical 403. Recorded as equivalent (the type gate IS the existence guard), NOT claimed as a test kill |
+| S8-3 | authority half dropped (`&& true`)                     | **RED: 8 failed** — 3 new-table rows + 5 scope HTTP tests                                                                                                                                                                                                                                    |
+| S8-4 | `canWriteEvent` role half dropped                      | **RED: 2 failed** — assigned provider/security rows of the new table (kills independently of W4's M3)                                                                                                                                                                                        |
+| S8-5 | `canWriteEvent` assignment half dropped                | **RED: 4 failed** — 1 new-table row + 3 scope HTTP tests                                                                                                                                                                                                                                     |
+| S8-6 | `requireObjectScope` guard removed (wiring)            | **RED: 5 failed** in `scope.int.spec.ts` — that suite pins BOTH guest-write routes; `events-write` staying green under this mutant is by design (it covers `POST /events` only)                                                                                                              |
+
+Campaign script: `/tmp/opencode/s8-mutation-campaign.sh` (backups `/tmp/opencode/s8-mut-backups/`).
+Mutation counts above are **per filtered file set** (the campaign's file filters), not full-suite totals — full-suite re-runs by the fresh reviewer found MORE failures for the same mutants (e.g. S8-4: 2 filtered vs 5 full; S8-5: 4 filtered vs 5 full). Understating kills is the safe direction; the script records the exact filters.
+S8-1/S8-2 are the honest account of the EXISTENCE half: no runtime test can distinguish it, so
+it is enforced by `tsc` — recorded rather than fake-claimed as a test kill.
+
+### Gates (actual output, after S8)
+
+| Gate                                         | Result                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `npm run test:unit`                          | **11 files / 144 tests passed** (unchanged — no unit file touched) |
+| `npm run test:int`                           | **9 files / 90 tests passed** (82 baseline + 8 new decision rows)  |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                         |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                         |
+| `npm run build`                              | exit **0** — "Prerendered 1 static route", no NG05xx               |
+| `./node_modules/.bin/prettier --check .`     | 0 unformatted files                                                |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                |
+
+`tasks.md` untouched: 2a.4/2a.5/2a.10 stay open until 2a-ii completes. Contract for 2a-ii:
+photo write routes MUST mount `requireObjectScope(...)` — a bare handler-level scope check is
+now a review deviation from S8.
