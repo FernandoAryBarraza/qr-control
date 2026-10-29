@@ -47,6 +47,8 @@ export interface EventPhoto {
   readonly time: string;
   readonly url: string;
   readonly big: string;
+  /** BR-13 soft-toggle flag — the API always sends the persisted value; optional for fixtures. */
+  readonly active?: boolean;
 }
 
 export type EventStatus = 'active' | 'upcoming' | 'done';

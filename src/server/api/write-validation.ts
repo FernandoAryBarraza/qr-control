@@ -1,6 +1,7 @@
-import type { GuestStatus } from '../../app/core/models';
+import type { GuestStatus, PhotoState } from '../../app/core/models';
 import type { EventWriteInput } from '../data/repositories/events';
 import type { GuestPatchInput, GuestWriteInput } from '../data/repositories/guests';
+import type { PhotoPatchInput, PhotoWriteInput } from '../data/repositories/photos';
 
 // App-layer payload validation (spec req 16, scenario 3): statuses stay strings in
 // SQLite, so write contracts are parsed here before Prisma sees them. The parsers
@@ -16,9 +17,14 @@ export const DEFAULT_RETENTION_DAYS = 365;
 // columns that would silently accept any 64-bit value and 500 on Postgres int4.
 export const MAX_RETENTION_DAYS = 3650; // 10 years — generous for event retention
 export const MAX_TABLE = 999;
+// W2 (photo columns): `sizeKb`/`height` are nullable int4 columns with the same
+// int4-safety rule — SQLite would silently accept any 64-bit value.
+export const MAX_SIZE_KB = 10_000_000; // 10 GB — generous for a single photo (demo ~3 MB)
+export const MAX_HEIGHT = 100_000; // px — generous single-image dimension bound
 const DEFAULT_GUEST_STATUS: GuestStatus = 'planned';
 const EVENT_STATUSES: readonly string[] = ['upcoming', 'active', 'finished'];
 const GUEST_STATUSES: readonly GuestStatus[] = ['planned', 'sent', 'confirmed', 'declined'];
+const PHOTO_STATUSES: readonly PhotoState[] = ['pending', 'approved', 'rejected'];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -164,6 +170,76 @@ export function parseGuestPatch(body: unknown): ParseResult<GuestPatchInput> {
     ok: true,
     value: {
       ...(status === undefined ? {} : { status }),
+      ...(active === undefined ? {} : { active }),
+    },
+  };
+}
+
+/** Spec req 16, scenario 3: photo state stays a string, validated at the app layer. */
+export function isPhotoState(value: unknown): value is PhotoState {
+  return typeof value === 'string' && PHOTO_STATUSES.some((status) => status === value);
+}
+
+/**
+ * POST /api/events/:id/photos (BR-16): the record holds metadata + an external
+ * URL only. `url` and `author` are required; `state`/`dl` default server-side;
+ * `size` arrives in domain MB and lands on the int4 `sizeKb` column within
+ * MAX_SIZE_KB; `big` (full-size URL) is optional. Unknown fields (`id`,
+ * `eventId`, `active`, `authorGuestId`) are never read — the route builds the
+ * row explicitly.
+ */
+export function parsePhotoInput(body: unknown): ParseResult<PhotoWriteInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const url = text(body['url']);
+  const author = text(body['author']);
+  if (url === null || author === null) return FAIL;
+
+  const state = body['state'] ?? 'pending';
+  if (!isPhotoState(state)) return FAIL;
+
+  const dl = body['dl'] ?? false;
+  if (typeof dl !== 'boolean') return FAIL;
+
+  // Decimal MB allowed (1b: 3.2 MB round-trips to 3200 KB); bounds reject
+  // negative, non-finite and int-unsafe values before Prisma sees them.
+  const size = body['size'] ?? null;
+  if (
+    size !== null &&
+    (typeof size !== 'number' ||
+      !Number.isFinite(size) ||
+      size < 0 ||
+      Math.round(size * 1000) > MAX_SIZE_KB)
+  ) {
+    return FAIL;
+  }
+
+  const h = body['h'] ?? null;
+  if (h !== null && (typeof h !== 'number' || !Number.isInteger(h) || h < 0 || h > MAX_HEIGHT)) {
+    return FAIL;
+  }
+
+  const rawBig = body['big'];
+  if (rawBig !== undefined && rawBig !== null && typeof rawBig !== 'string') return FAIL;
+  const big = typeof rawBig === 'string' && rawBig.trim() !== '' ? rawBig.trim() : null;
+
+  return { ok: true, value: { url, author, state, dl, size, h, big } };
+}
+
+/** PATCH /api/photos/:id — state and/or active only (BR-13 toggle, never a delete). */
+export function parsePhotoPatch(body: unknown): ParseResult<PhotoPatchInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const state = body['state'];
+  const active = body['active'];
+  if (state === undefined && active === undefined) return FAIL;
+  if (state !== undefined && !isPhotoState(state)) return FAIL;
+  if (active !== undefined && typeof active !== 'boolean') return FAIL;
+
+  return {
+    ok: true,
+    value: {
+      ...(state === undefined ? {} : { state }),
       ...(active === undefined ? {} : { active }),
     },
   };

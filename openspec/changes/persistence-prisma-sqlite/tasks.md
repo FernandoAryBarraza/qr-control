@@ -394,17 +394,28 @@ renumbered — the BR trace table and every spec reference stay valid.**
       without an admin rejected. _Traces: BR-02 → spec req 2 (all 3 scenarios)._
 - [x] **2a.3** _[2a-i]_ Implement `POST /api/events` (provider-only, ≥1 admin validation) in
       `src/server/api/`. 🚧 after 2a.2 + PR-1c authz.
-- [ ] **2a.4** _[2a-i guests; photos half in 2a-ii]_ **Test-first (RED):** write the object-level
+- [x] **2a.4** _[2a-i guests; photos half in 2a-ii-a]_ **Test-first (RED):** write the object-level
       suite `src/server/api/scope.int.spec.ts` — admin of event A: (a) every write targeting an
       event B entity rejected **by exact ID** with no data disclosed and no record changed;
       (b) reads return only event A data. Cover guests, photos, check-in attempts, and (as
       they land) QR paths via the same helpers. _Traces: BR-03, BR-04 → spec req 3 (scenarios
       3–4)._
-- [ ] **2a.5** _[2a-i guests endpoints; photos half in 2a-ii]_ Implement writes with scope
+      _(✅ guests half in 2a-i (9 tests); photos half in 2a-ii-a (17 tests — exact-ID 403 with
+      the row unchanged, unknown ≡ foreign, own-event reads, cross-event create with no row).
+      Check-in/QR routes do not exist yet and join PR-3b through the same helpers (the task's
+      "as they land" clause). Honest TDD note: the photo cycle was interrupted by session
+      failure — RED not replayable, coverage verified by mutation 6/6 — see apply-progress
+      §PR-2a-ii-a.)_
+- [x] **2a.5** _[2a-i guests endpoints; photos half in 2a-ii-a]_ Implement writes with scope
       resolution via each row's `eventId`: `POST /api/events/:id/guests`,
       `PATCH /api/guests/:id` (status/active), `POST /api/events/:id/photos`,
       `PATCH /api/photos/:id` (state/active) — all assigned-admin only, object-level checks on
       standalone IDs.
+      _(✅ guests endpoints in 2a-i; photo endpoints in 2a-ii-a — both mounted through the S8
+      `requireObjectScope` factory (`eventWriteScope` for the URL event id;
+      `photoRowWriteScope` via `photoEventId` for the row), assigned-admin only, generic 400
+      via `badRequest`, mass-assignment immunity asserted. Mutation-verified 6/6 — see
+      apply-progress §PR-2a-ii-a.)_
 - [ ] **2a.6** _[2a-ii]_ **Test-first (RED):** write `src/server/api/members.int.spec.ts` —
       admin of event A creates a `security` user scoped to A (usable as trusted context);
       provider cannot create security/second-admin directly; provider CAN read permission
@@ -425,6 +436,9 @@ renumbered — the BR trace table and every spec reference stay valid.**
       _(Unchecked after review: the gates are green for 2a-i, but 2a.10 also covers 2a.4/2a.5,
       which stay open until the photos half lands in 2a-ii — re-run the gate at the end of
       2a-ii.)_
+      _(Update at 2a-ii-a: all 7 gates re-run green after the photos half landed — 144 unit /
+      107 int / both `tsc` projects / build / prettier / 57-57 parity — and 2a.4 + 2a.5 are now
+      checked. Checkbox stays OPEN until members + toggles (2a.6–2a.9, 2a-ii-b) close 2a-ii.)_
 
 **Suggested work-unit commits — 2a-i:**
 

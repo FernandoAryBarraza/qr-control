@@ -9,10 +9,16 @@ import {
   listEvents,
 } from '../data/repositories/events';
 import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repositories/guests';
-import { listPhotos } from '../data/repositories/photos';
+import { createPhoto, listPhotos, photoEventId, updatePhoto } from '../data/repositories/photos';
 import { canCreateEvent, canReadEvent, canWriteObject, resolveEventScope } from './authz';
 import { callerContext, callerOf } from './caller-context';
-import { parseEventInput, parseGuestInput, parseGuestPatch } from './write-validation';
+import {
+  parseEventInput,
+  parseGuestInput,
+  parseGuestPatch,
+  parsePhotoInput,
+  parsePhotoPatch,
+} from './write-validation';
 
 export const apiRouter = Router();
 
@@ -80,6 +86,7 @@ const eventWriteScope = requireObjectScope(async (req) => pathId(req));
 // Row-addressed writes take the scope from the ROW's own event id — never a
 // client-supplied one (spec req 3, scenario 3).
 const guestRowWriteScope = requireObjectScope(async (req) => guestEventId(pathId(req)));
+const photoRowWriteScope = requireObjectScope(async (req) => photoEventId(pathId(req)));
 
 // GET /api/events — provider: all; admin/security: assigned only (BR-03).
 apiRouter.get('/events', callerContext, async (req, res) => {
@@ -152,4 +159,26 @@ apiRouter.patch('/guests/:id', callerContext, guestRowWriteScope, async (req, re
 // GET /api/events/:id/photos — provider any; assigned admin (design §5).
 apiRouter.get('/events/:id/photos', callerContext, eventAccess('content'), async (req, res) => {
   res.json(await listPhotos(pathId(req)));
+});
+
+// POST /api/events/:id/photos — assigned admin only; the event id comes from the
+// URL. BR-16: the row stores metadata + an opaque external URL, never image bytes.
+apiRouter.post('/events/:id/photos', callerContext, eventWriteScope, async (req, res) => {
+  const parsed = parsePhotoInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  res.status(201).json(await createPhoto(pathId(req), parsed.value));
+});
+
+// PATCH /api/photos/:id — assigned admin only (BR-13: state/active toggle, never
+// a delete); scope resolves from the ROW's eventId (spec req 3, scenario 3).
+apiRouter.patch('/photos/:id', callerContext, photoRowWriteScope, async (req, res) => {
+  const parsed = parsePhotoPatch(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  res.json(await updatePhoto(pathId(req), parsed.value));
 });

@@ -1192,3 +1192,114 @@ it is enforced by `tsc` — recorded rather than fake-claimed as a test kill.
 `tasks.md` untouched: 2a.4/2a.5/2a.10 stay open until 2a-ii completes. Contract for 2a-ii:
 photo write routes MUST mount `requireObjectScope(...)` — a bare handler-level scope check is
 now a review deviation from S8.
+
+---
+
+# PR-2a-ii-a — photo write endpoints (tasks 2a.4/2a.5 photos half)
+
+Continuation batch. **The implementing session was interrupted by a usage-limit failure mid-work**
+and its RED→GREEN sequence was lost with it; a completion executor then audited the surviving tree
+against the spec, verified coverage by mutation, and recorded the gates. Nothing staged or
+committed (orchestrator owns git). Working tree carries the 2a-ii-a footprint: 5 modified paths,
+HEAD `7f24cc0`. No new spec file — the coverage extends `scope.int.spec.ts` exactly where the 2a-i
+handoff prescribed.
+
+## Honest TDD account
+
+**cycle interrupted by session failure; RED not replayable — coverage verified by mutation.**
+The 17 photo tests were already green in the surviving tree before this record existed; their
+original RED state cannot be claimed or honestly replayed once the implementation exists (same
+situation the maintainer granted a TDD exception for in 2a-i). The six new guards the tests pin
+were therefore verified by the mutation campaign below: **6/6 mutants killed on the full
+107-test suite (not filtered), every restore `cmp`-verified byte-identical.**
+
+## Status (audited by the completion executor)
+
+| Task                                      | Status | Verification                                                                                                                                                                                                                                                                               |
+| ----------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2a.4 object-level suite — **photos half** | ✅     | `scope.int.spec.ts` photo block: **17 new tests** (file 17→34; int 90→107) — cross-event PATCH by exact ID → byte-identical 403 + row unchanged; unknown ≡ foreign; cross-event POST → 403 + no row; own-event reads only. Check-in/QR join PR-3b per the task's own "as they land" clause |
+| 2a.5 photo writes — **photos half**       | ✅     | `POST /api/events/:id/photos` (201) and `PATCH /api/photos/:id` (state/active) mounted through the S8 `requireObjectScope` factory; assigned-admin only; scope from the URL event id / the ROW's `eventId` (`photoEventId`)                                                                |
+| 2a.10 PR verification gate                | 🚧     | All 7 gates green for 2a-ii-a (table below). Checkbox stays OPEN: 2a.10 also covers 2a.6–2a.9 (members/toggles, 2a-ii-b)                                                                                                                                                                   |
+| 2a.6–2a.9 members + toggles               | —      | **2a-ii-b, not touched by this batch** — checkboxes stay unchecked                                                                                                                                                                                                                         |
+
+## Spec coverage vs audit (findings)
+
+| Check                                                                                                                               | Result                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tasks 2a.4/2a.5 photo halves (exact-ID rejection, no disclosure, no record change, own-event reads; create + patch, assigned admin) | ✅ 17 tests; security AND provider rejected on both routes; no-context → 401                                                                                                                                                                                                      |
+| spec req 3, scenarios 3–4 (object-level by ID; cross-event write rejected, record unchanged)                                        | ✅ foreign PATCH → `{statusCode: 403, message: 'Forbidden'}` with full-row equality before/after; nonexistent ≡ foreign byte-identical; cross-event POST creates nothing                                                                                                          |
+| spec req 12 (Admin Soft Toggles — photo half)                                                                                       | ✅ reversible single-row toggle, sibling row byte-identical, `active` defaults true on create, mass-assigned `active` ignored                                                                                                                                                     |
+| spec req 14 scenario 1 / BR-16 (metadata + external URL, no bytes)                                                                  | ✅ created row asserted field-by-field; no `blob                                                                                                                                                                                                                                  | bytes | buffer`key on the record; server-generated`ph-`id and`time`; `sizeKb` = round-trip of domain MB |
+| spec req 16 guardrail (string status, value validation at the app layer)                                                            | ✅ `state: 'maybe'` → generic 400 through the shared `isPhotoState` predicate (also used by `parsePhotoPatch`)                                                                                                                                                                    |
+| S8 contract (`requireObjectScope` factory, `callerContext` first, generic 400 via `badRequest`, mass-assignment immunity)           | ✅ `eventWriteScope` (URL event id) on POST, `photoRowWriteScope` (row `eventId`) on PATCH — no third scope mechanism; `createPhoto` builds the row field-by-field, so `id`/`eventId`/`active`/`downloaded`/`authorGuestId` can never be client-set; malformed JSON → generic 400 |
+| design §5 matrix (photo write = assigned admin)                                                                                     | ✅ matches — provider/security denied even for their own event's photos                                                                                                                                                                                                           |
+
+**Finding F1 (non-blocking, doc-only): citation drift.** The chain cites "spec req 16, scenario 3"
+for app-layer status validation (the new comments in `write-validation.ts` and the pre-existing
+PR-1c handoff note above), but `spec.md` req 16 has only **two** scenarios since the spec's initial
+commit — the substance matches **req 16 scenario 2** ("No database enums block the switch" → "all
+status columns are string-typed, with value validation at the application layer"). Left unrewritten
+(pre-existing convention across the chain, zero behavior impact) — flagged for the orchestrator.
+No coverage gaps were found against tasks 2a.4/2a.5 photo halves or the design §5 matrix.
+
+## Mutation-verification (6/6 mutants killed — FULL 107-test suite per mutant, not filtered)
+
+Each mutant: precise literal replacement → full `npm run test:int` → the named tests go RED →
+restore → `cmp` byte-identical against the pre-campaign backup.
+
+| #   | Mutant (guard weakened)                                            | Expected RED test killed                                         | Observed (failed / 107)                                                                                                                                                                                                               | Restored |
+| --- | ------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| M1  | `PATCH /photos/:id` drops the `photoRowWriteScope` wiring          | cross-event photo write must be rejected by exact ID             | **4 failed** — `rejects a cross-event photo write by exact ID without disclosing or changing it`, `answers a nonexistent photo ID exactly like a foreign one`, `rejects photo writes from usr-003` (security), `… usr-001` (provider) | `cmp` OK |
+| M2  | `POST /events/:id/photos` drops the `eventWriteScope` wiring       | cross-event photo creation must be rejected, no row created      | **3 failed** — `rejects photo creation for another event without creating a row`, `rejects photo writes from usr-003`, `rejects photo writes from usr-001`                                                                            | `cmp` OK |
+| M3  | `parsePhotoInput` state validation dropped (cast instead of check) | invalid `state` → generic 400                                    | **1 failed** — `rejects an invalid photo patch on an own photo without changing it` (`state: 'maybe'` → 201)                                                                                                                          | `cmp` OK |
+| M4  | `MAX_SIZE_KB` upper bound dropped from the `size` check            | int-unsafe `size` → 400                                          | **1 failed** — `rejects an out-of-bounds photo size (999999999999) without creating a row`                                                                                                                                            | `cmp` OK |
+| M5  | `MAX_HEIGHT` upper bound dropped from the `h` check                | overflow `h` → 400                                               | **2 failed** — `rejects an out-of-bounds photo h (2147483648) …`, `rejects an out-of-bounds photo h (100001) …`                                                                                                                       | `cmp` OK |
+| M6  | `photoEventId` returns the URL id instead of the row's `eventId`   | row-scoped PATCH must resolve the owning event, never the URL id | **2 failed** — `updates a photo of the admin own event and merges partial patches` (own row now 403), `rejects an invalid photo patch on an own photo without changing it`                                                            | `cmp` OK |
+
+Campaign scripts: `/tmp/opencode/2a-iia-mutation-campaign.sh` + `/tmp/opencode/2a-iia-mutation-names.sh`
+(backups `/tmp/opencode/2a-iia-mut-backups/`). Post-campaign `git diff --numstat` is identical to
+the pre-campaign values (`2/0, 31/2, 262/3, 77/1, 69/4`) and all three mutated files `cmp`
+byte-identical to their backups — the tree left the campaign exactly as it entered it.
+
+## Verification gates (actual output)
+
+| Gate                                         | Result                                                                      |
+| -------------------------------------------- | --------------------------------------------------------------------------- |
+| `npm run test:unit`                          | **11 files / 144 tests passed** (unchanged baseline — no unit file touched) |
+| `npm run test:int`                           | **9 files / 107 tests passed** (90 baseline + 17 new photo tests)           |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                                  |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                                  |
+| `npm run build`                              | exit **0** — "Prerendered 1 static route", no NG05xx                        |
+| `npx prettier --check .`                     | 0 unformatted files                                                         |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                         |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank — chain metric)
+
+| Unit                                                     | Lines   |
+| -------------------------------------------------------- | ------- |
+| `api/scope.int.spec.ts` (diff, photo block)              | 212     |
+| `data/repositories/photos.ts` (diff, writes)             | 57      |
+| `api/write-validation.ts` (diff, photo parsers + bounds) | 51      |
+| `api/index.ts` (diff, photo routes + scope instance)     | 25      |
+| `app/core/models.ts` (diff, `EventPhoto.active?`)        | 1       |
+| **Total**                                                | **346** |
+
+**346 ≤ 400 — within budget** (forecast for the photos half was ≈180; the delta is test
+expansion — mass-assignment parity, bounds table, 401/malformed-JSON parity — not production code:
+production ≈ **134** code lines, tests ≈ **212**). Excluded per the chain metric: openspec docs,
+comment-only lines, blank lines.
+
+## Files touched (2a-ii-a, uncommitted)
+
+- **Modified (5):** `src/server/api/scope.int.spec.ts` (+262/−3 — photo scope block),
+  `src/server/api/write-validation.ts` (+77/−1 — `parsePhotoInput`, `parsePhotoPatch`,
+  `isPhotoState`, `MAX_SIZE_KB`, `MAX_HEIGHT`), `src/server/data/repositories/photos.ts`
+  (+69/−4 — `createPhoto`, `updatePhoto`, `photoEventId`, write contracts),
+  `src/server/api/index.ts` (+31/−2 — two routes + `photoRowWriteScope`),
+  `src/app/core/models.ts` (+2/−0 — type-only `EventPhoto.active?` + doc comment)
+- **Plus docs:** `openspec/.../tasks.md` (2a.4, 2a.5 checked; 2a.10 note), this file
+- **New files:** none
+- **Untouched:** `prisma/**` (no schema change, no migration), `src/server/api/authz.ts` (the S8
+  `canWriteObject`/`requireObjectScope` helper is reused unchanged), `src/server.ts`, every
+  ground-rule-1 dirty file, all client feature code (the only `src/app` change is the type-only
+  `EventPhoto.active?`, mirroring the 2a-i `Guest.active?` decision)

@@ -247,7 +247,266 @@ describe('object-level guest scope (spec req 3, scenarios 3-4)', () => {
   });
 });
 
-// --- 2a-ii (photos half) ---------------------------------------------------
+// --- 2a-ii-a (photos half) --------------------------------------------------
 // The same object-level assertions extend to POST /api/events/:id/photos and
-// PATCH /api/photos/:id in the 2a-ii batch. Those routes do not exist yet, so no
-// test is written here; check-in and QR paths join in PR-3b through canWriteEvent.
+// PATCH /api/photos/:id. Check-in and QR paths join in PR-3b through the same
+// helpers (task 2a.4 "as they land"); members/toggles are 2a-ii-b.
+describe('object-level photo scope (spec req 3, scenarios 3-4; req 12; req 14)', () => {
+  beforeEach(async () => {
+    await seedDatabase(getPrisma());
+  });
+
+  it('updates a photo of the admin own event and merges partial patches', async () => {
+    // Spec req 12, scenario 3: the toggle targets exactly one row.
+    const sibling = await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-002' } });
+
+    const res = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, {
+      state: 'rejected',
+      active: false,
+    });
+
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as Record<string, unknown>;
+    expect(updated).toMatchObject({ id: 'ph-001', state: 'rejected', active: false });
+
+    // A second patch touches only the field it names: no reset of the first change.
+    const toggled = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, { active: true });
+    expect(toggled.status).toBe(200);
+    expect(await toggled.json()).toMatchObject({ id: 'ph-001', state: 'rejected', active: true });
+
+    const row = await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } });
+    expect(row).toMatchObject({
+      state: 'rejected',
+      active: true,
+      authorName: 'Lucía Ferreyra',
+      downloaded: true,
+      sizeKb: 3200,
+    });
+    expect(await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-002' } })).toEqual(sibling);
+  });
+
+  it('rejects a cross-event photo write by exact ID without disclosing or changing it', async () => {
+    const before = await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } });
+
+    const res = await request('PATCH', '/api/photos/ph-001', ADMIN_EV2, {
+      state: 'rejected',
+      active: false,
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ statusCode: 403, message: 'Forbidden' });
+    expect(await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } })).toEqual(before);
+  });
+
+  it('answers a nonexistent photo ID exactly like a foreign one', async () => {
+    const foreign = await request('PATCH', '/api/photos/ph-001', ADMIN_EV2, { state: 'rejected' });
+    const unknown = await request('PATCH', '/api/photos/ph-999', ADMIN_EV2, { state: 'rejected' });
+
+    expect(unknown.status).toBe(foreign.status);
+    expect(await unknown.json()).toEqual(await foreign.json());
+    expect(await getPrisma().photo.count()).toBe(14);
+  });
+
+  it('creates photos only inside the assigned event with metadata and URL only', async () => {
+    const res = await request('POST', '/api/events/ev-001/photos', ADMIN_EV1, {
+      author: '  Nueva Autora  ',
+      url: 'https://cdn.example.com/640/460.jpg',
+      big: 'https://cdn.example.com/1600/1200.jpg',
+      size: 3.2,
+      h: 460,
+    });
+
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as Record<string, unknown>;
+    expect(created).toMatchObject({
+      author: 'Nueva Autora',
+      state: 'pending', // server default — the client never picks it
+      dl: false,
+      active: true, // BR-13 soft-toggle default
+      size: 3.2, // sizeKb/1000 round trip (1b handoff: decimal KB)
+      h: 460,
+      url: 'https://cdn.example.com/640/460.jpg',
+      big: 'https://cdn.example.com/1600/1200.jpg',
+      time: expect.stringMatching(/^\d{2}:\d{2}$/),
+    });
+    expect(created['id']).toMatch(/^ph-/);
+
+    const row = await getPrisma().photo.findUniqueOrThrow({
+      where: { id: String(created['id']) },
+    });
+    expect(row.eventId).toBe('ev-001');
+    expect(row.sizeKb).toBe(3200);
+    expect(row.authorName).toBe('Nueva Autora');
+    expect(row.bigUrl).toBe('https://cdn.example.com/1600/1200.jpg');
+    // Spec req 14, scenario 1: metadata + external URL — no blob/bytes carrier.
+    expect(Object.keys(row).some((key) => /blob|bytes|buffer/i.test(key))).toBe(false);
+    expect(await getPrisma().photo.count({ where: { eventId: 'ev-001' } })).toBe(15);
+  });
+
+  it('rejects photo creation for another event without creating a row', async () => {
+    const res = await request('POST', '/api/events/ev-002/photos', ADMIN_EV1, {
+      author: 'Intrusa',
+      url: 'https://cdn.example.com/intrusa.jpg',
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ statusCode: 403, message: 'Forbidden' });
+    expect(await getPrisma().photo.count({ where: { eventId: 'ev-002' } })).toBe(0);
+  });
+
+  it.each([SECURITY_EV1, PROVIDER])('rejects photo writes from %s', async (userId) => {
+    const patch = await request('PATCH', '/api/photos/ph-001', userId, { state: 'rejected' });
+    const create = await request('POST', '/api/events/ev-001/photos', userId, {
+      author: 'No Autorizada',
+      url: 'https://cdn.example.com/no-autorizada.jpg',
+    });
+
+    expect(patch.status).toBe(403);
+    expect(create.status).toBe(403);
+    expect(await getPrisma().photo.count()).toBe(14);
+  });
+
+  it.each([
+    ['a photo patch', 'PATCH', '/api/photos/ph-001', { state: 'rejected' }],
+    [
+      'a photo creation',
+      'POST',
+      '/api/events/ev-001/photos',
+      { author: 'Sin Credenciales', url: 'https://cdn.example.com/sin-credenciales.jpg' },
+    ],
+  ] as const)('rejects unauthenticated %s with 401', async (_label, method, path, body) => {
+    const res = await request(method, path, undefined, body);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ statusCode: 401, message: 'Unauthorized' });
+  });
+
+  // W1: malformed JSON never reaches a route — same generic 400 as the guests route.
+  it('answers a malformed JSON photo body with a generic 400', async () => {
+    const res = await apiFetch('/api/events/ev-001/photos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': ADMIN_EV1 },
+      body: '{"author": ',
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
+  });
+
+  // W1/S4: unknown fields are ignored — the id is generated server-side, the
+  // event comes from the URL, `active`/`state` defaults are the server's, and
+  // `authorGuestId` stays deferred (design §11: no client-settable guest link).
+  it('ignores mass-assignment attempts (id/eventId/active/authorGuestId) on creation', async () => {
+    const res = await apiFetch('/api/events/ev-001/photos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': ADMIN_EV1 },
+      body: JSON.stringify({
+        author: 'Intento de Inyección',
+        url: 'https://cdn.example.com/attack.jpg',
+        id: 'ph-attacker',
+        eventId: 'ev-002',
+        active: false,
+        downloaded: true,
+        authorGuestId: 'g-001',
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { id: string; active: boolean; state: string };
+    expect(created.id).toMatch(/^ph-/);
+    expect(created.id).not.toBe('ph-attacker');
+    expect(created.active).toBe(true);
+    expect(created.state).toBe('pending');
+
+    const row = await getPrisma().photo.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row.eventId).toBe('ev-001');
+    expect(row.downloaded).toBe(false);
+    expect(row.authorGuestId).toBeNull();
+    expect(await getPrisma().photo.count({ where: { eventId: 'ev-002' } })).toBe(0);
+  });
+
+  it('rejects an invalid photo patch on an own photo without changing it', async () => {
+    const before = await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } });
+
+    const invalid = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, {
+      state: 'not-a-state',
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
+
+    const badActive = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, { active: 'yes' });
+    expect(badActive.status).toBe(400);
+    expect(await badActive.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
+
+    const empty = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, {});
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
+    expect(await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } })).toEqual(before);
+
+    const badState = await request('POST', '/api/events/ev-001/photos', ADMIN_EV1, {
+      author: 'Estado Inválido',
+      url: 'https://cdn.example.com/estado.jpg',
+      state: 'maybe',
+    });
+    expect(badState.status).toBe(400);
+
+    const noUrl = await request('POST', '/api/events/ev-001/photos', ADMIN_EV1, {
+      author: 'Sin URL',
+    });
+    expect(noUrl.status).toBe(400);
+
+    const noAuthor = await request('POST', '/api/events/ev-001/photos', ADMIN_EV1, {
+      url: 'https://cdn.example.com/sin-autor.jpg',
+    });
+    expect(noAuthor.status).toBe(400);
+
+    const badDl = await request('POST', '/api/events/ev-001/photos', ADMIN_EV1, {
+      author: 'DL Inválido',
+      url: 'https://cdn.example.com/dl.jpg',
+      dl: 'yes',
+    });
+    expect(badDl.status).toBe(400);
+    expect(await getPrisma().photo.count({ where: { eventId: 'ev-001' } })).toBe(14);
+  });
+
+  // W2: `sizeKb`/`height` are nullable int4 columns — reject int-unsafe and
+  // out-of-bounds values at the app layer (same rule as retentionDays/table).
+  it.each([
+    ['size', 999999999999],
+    ['size', -1],
+    ['h', 2147483648],
+    ['h', 100001],
+  ] as const)(
+    'rejects an out-of-bounds photo %s (%s) without creating a row',
+    async (field, value) => {
+      const res = await request('POST', '/api/events/ev-001/photos', ADMIN_EV1, {
+        author: 'Fuera de Límite',
+        url: 'https://cdn.example.com/limite.jpg',
+        [field]: value,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
+      expect(await getPrisma().photo.count({ where: { eventId: 'ev-001' } })).toBe(14);
+    },
+  );
+
+  it('returns only the assigned event photos to its admin', async () => {
+    const own = await request('GET', '/api/events/ev-001/photos', ADMIN_EV1);
+    const photos = (await own.json()) as { id: string; active: boolean }[];
+    const expected = await getPrisma().photo.findMany({
+      where: { eventId: 'ev-001' },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+
+    expect(own.status).toBe(200);
+    expect(photos.map((photo) => photo.id)).toEqual(expected.map((row) => row.id));
+    // The BR-13 toggle flag joins the read shape (mirrors Guest.active).
+    expect(photos.every((photo) => photo.active)).toBe(true);
+
+    const foreign = await request('GET', '/api/events/ev-002/photos', ADMIN_EV1);
+    expect(foreign.status).toBe(403);
+    expect(await foreign.json()).toEqual({ statusCode: 403, message: 'Forbidden' });
+  });
+});
