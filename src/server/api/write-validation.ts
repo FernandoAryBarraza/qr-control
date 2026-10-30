@@ -1,6 +1,7 @@
 import type { GuestStatus, PhotoState } from '../../app/core/models';
 import type { EventWriteInput } from '../data/repositories/events';
 import type { GuestPatchInput, GuestWriteInput } from '../data/repositories/guests';
+import type { MemberWriteInput } from '../data/repositories/members';
 import type { PhotoPatchInput, PhotoWriteInput } from '../data/repositories/photos';
 
 // App-layer payload validation (spec req 16, scenario 3): statuses stay strings in
@@ -243,4 +244,20 @@ export function parsePhotoPatch(body: unknown): ParseResult<PhotoPatchInput> {
       ...(active === undefined ? {} : { active }),
     },
   };
+}
+
+/**
+ * POST /api/events/:id/members (spec req 5 / BR-06): only the `security` role may
+ * be created here. A second `admin` goes through the BR-05 approval flow, never
+ * this route, and the provider cannot create lower roles at all (the route's
+ * scope guard denies them before this parser runs). Client-supplied ids and the
+ * owning event id are never read — the route builds the row explicitly.
+ */
+export function parseMemberInput(body: unknown): ParseResult<MemberWriteInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const name = text(body['name']);
+  if (name === null || body['role'] !== 'security') return FAIL;
+
+  return { ok: true, value: { name } };
 }

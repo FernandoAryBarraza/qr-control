@@ -1303,3 +1303,113 @@ comment-only lines, blank lines.
   `canWriteObject`/`requireObjectScope` helper is reused unchanged), `src/server.ts`, every
   ground-rule-1 dirty file, all client feature code (the only `src/app` change is the type-only
   `EventPhoto.active?`, mirroring the 2a-i `Guest.active?` decision)
+
+---
+
+# PR-2a-ii-b — members endpoints + toggle/no-delete verification (tasks 2a.6–2a.10)
+
+Continuation batch on HEAD `fde1c8a` (photos landed). Nothing staged or committed —
+the orchestrator owns git. Tree carries the 2a-ii-b footprint: 2 modified + 3 new paths.
+No spec-file or schema change: members ride on the existing `User` + `EventAssignment`
+rows (design §3), so `prisma/**` stays untouched.
+
+## Honest TDD account
+
+- **2a.6/2a.7 (members): true RED→GREEN, captured in-session.** RED first:
+  `src/server/api/members.int.spec.ts` written against the route-less tree →
+  `npm run test:int <file>` → **9 failed (9)**, every test failing with
+  `expected 404 to be …` (routes absent; no production code touched). GREEN after the
+  minimal implementation (repo + parser + two routes) → **9 passed (9)**. One in-cycle
+  fix was the test harness itself (a double `.json()` read on one `Response` body in the
+  scope-rejection test) — production code unchanged by it.
+- **2a.8/2a.9 (toggles/no-delete): already satisfied by prior batches — closed honestly
+  per 2a.9, not re-labeled as a fresh RED.** The 5-test suite ran against the tree as-is:
+  the 4 toggle scenarios (guest deactivation persists through the list read; full-row-
+  equality reversibility; photo sibling-row isolation; cross-event toggle → 403 + rows
+  unchanged) were **already GREEN** — the guest PATCH (2a-i) and photo PATCH (2a-ii-a)
+  behaviors they pin had their RED pre-verified by mutation in those batches (2a-i
+  M11/M12; 2a-ii-a M1/M6). The no-delete test was RED once only against a wrong fixture
+  constant **in the test itself** (seed photo count 13 vs the actual 14 — corrected to
+  14); its behavior (no DELETE route registered, admin `DELETE` → 404, all row counts
+  intact) required **zero production changes**. It is a structural BR-13 pin:
+  `registeredDeleteRoutes()` introspects `apiRouter.stack` and must stay `[]` until PR-3
+  adds the provider-only `DELETE /api/events/:id` (BR-12), which must then reject admins.
+
+## Status
+
+| Task                         | Status | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2a.6 members RED suite       | ✅     | `members.int.spec.ts` **9 tests** — admin of ev-001 creates a `security` user scoped to A **usable as trusted caller context** (header → DB role → `GET /api/events` scoped to `ev-001` only); provider 403 on direct creation of security AND lower-admin payloads with zero rows; provider reads any event's holders; a second-admin payload (`role:'admin'`) gets generic 400 even from the own admin — BR-05 approval flow is the only second-admin path |
+| 2a.7 members endpoints       | ✅     | `GET /api/events/:id/members` (provider any; assigned admin — existing `eventAccess('content')`); `POST /api/events/:id/members` (assigned admin only via the S8 `eventWriteScope` factory; provider forbidden by the matrix; `parseMemberInput` fixes the role to `security`; `createSecurityMember` builds user + assignment atomically with a server-generated `usr-` id; mass-assignment immunity asserted: client `id`/`userId`/`eventId` never read)   |
+| 2a.8 toggles/no-delete suite | ✅     | `toggles.int.spec.ts` **5 tests** — req 12 all 3 scenarios + req 11 scenario 3 + the BR-13 structural no-DELETE pin                                                                                                                                                                                                                                                                                                                                          |
+| 2a.9 RED/GREEN loop closure  | ✅     | Honest account above: 4/5 already green from 2a-i/2a-ii-a (mutation-preverified in those batches), 1 fixture-constant correction in the test, **0 production changes** for the no-delete behavior                                                                                                                                                                                                                                                            |
+| 2a.10 PR verification gate   | ✅     | All 7 gates re-run green **with 2a.6–2a.9 included** (table below), closing 2a-ii. Every event-scoped endpoint that exists today carries a server-side rejection test (events-write / scope / members / toggles suites); the PR-4 end-to-end sweep re-validates per the task's own clause                                                                                                                                                                    |
+
+## Spec coverage vs audit
+
+| Check                                                                                                            | Result                                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| req 5 scenario 1 (admin creates security for own event, usable as trusted context)                               | ✅ 201 + `user` row (role `security`) + `eventAssignment` row; the new id resolves as a trusted caller and `GET /api/events` returns `ev-001` only                                                                |
+| req 5 scenario 2 (provider cannot create lower roles)                                                            | ✅ provider → byte-identical 403 for both `security` and `admin` payloads, zero rows; additionally the OWN admin cannot create `admin`/`provider` members directly (generic 400) — outside BR-05 for everyone     |
+| req 5 scenario 3 (provider views permission holders)                                                             | ✅ provider reads ev-002 holders with exact user ids/roles (1 admin + 2 security)                                                                                                                                 |
+| req 3 scenarios 2–3 as applied to members                                                                        | ✅ foreign and unknown members reads byte-identical 403; cross-event POST → 403 + no rows; assigned security read → 403                                                                                           |
+| design §5 matrix (GET: provider any + assigned admin; POST: assigned admin creates security; provider forbidden) | ✅ both routes mount the existing guards (`eventAccess('content')` / `eventWriteScope`) — no third scope mechanism; role gate = `canWriteEvent` (admin + assigned)                                                |
+| req 12 all 3 scenarios (persist `active:false`; reversible with all other fields unchanged; one row targeted)    | ✅ pinned in `toggles.int.spec.ts` (full-row `toEqual` equality around the off/on cycle; sibling photo rows compared wholesale) — already-green, mutation M3 proves the test has teeth                            |
+| req 11 scenario 3 + BR-13 (admin delete always rejected, records intact)                                         | ✅ `DELETE` on event/guest/photo paths as admin → 404 with event/guest/photo counts intact, **and** zero DELETE routes registered on `apiRouter` (structural — survives no matter which caller sends the request) |
+
+## Mutation-verification (4/4 mutants killed — FULL 121-test suite per mutant, not filtered)
+
+Each mutant: precise literal replacement → full `npm run test:int` → named tests RED →
+restore → `cmp` byte-identical against the pre-campaign backup.
+
+| #   | Mutant (one new guard weakened)                               | Expected RED test killed                                              | Observed (failed / 121)                                                                                                                                                   | Restored |
+| --- | ------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| M1  | POST `/events/:id/members` drops the `eventWriteScope` wiring | member creation must be assigned-admin only                           | **3 failed** — `rejects direct member creation by the provider`, `rejects member creation for another event without creating rows`, `rejects member writes from security` | `cmp` OK |
+| M2  | `parseMemberInput` drops the `security`-role validation       | a direct second-admin payload must be rejected even for the own admin | **1 failed** — `rejects a second-admin member outside the BR-05 approval flow`                                                                                            | `cmp` OK |
+| M3  | `updateGuest` overwrites an untouched field (`email: ''`)     | toggle-back must restore the row with all other fields unchanged      | **1 failed** — `toggling back restores the previous state with every other field unchanged` (full-row equality)                                                           | `cmp` OK |
+| M4  | GET `/events/:id/members` drops the `eventAccess('content')`  | members reads must be scope-rejected                                  | **1 failed** — `rejects members reads outside the callers event scope`                                                                                                    | `cmp` OK |
+
+Campaign script: `/tmp/opencode/2a-iib-mutation-campaign.sh` (backups
+`/tmp/opencode/2a-iib-mut-backups/`). Post-campaign `git diff --numstat` is identical to
+the pre-campaign values (`20/0` index.ts, `17/0` write-validation.ts) and all three
+mutated files `cmp` byte-identical to their backups — the tree left the campaign exactly
+as it entered it.
+
+## Verification gates (actual output)
+
+| Gate                                         | Result                                                                      |
+| -------------------------------------------- | --------------------------------------------------------------------------- |
+| `npm run test:unit`                          | **11 files / 144 tests passed** (unchanged baseline — no unit file touched) |
+| `npm run test:int`                           | **11 files / 121 tests passed** (107 baseline + 9 members + 5 toggles)      |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                                  |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                                  |
+| `npm run build`                              | exit **0** — bundle generated, no NG05xx                                    |
+| `npx prettier --check .`                     | 0 unformatted files (post-format of the new spec, suite re-ran 121/121)     |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                         |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank — chain metric)
+
+| Unit                                               | Lines   |
+| -------------------------------------------------- | ------- |
+| `api/members.int.spec.ts` (new, whole file)        | 151     |
+| `api/toggles.int.spec.ts` (new, whole file)        | 100     |
+| `data/repositories/members.ts` (new, whole file)   | 33      |
+| `api/index.ts` (diff delta — two routes + imports) | 13      |
+| `api/write-validation.ts` (diff delta — parser)    | 12      |
+| **Total**                                          | **309** |
+
+**309 ≤ 400 — within budget** (forecast ≈255; the delta is test expansion — the
+401/mass-assignment/structural-delete parity lines — not production code: production ≈
+**58** code lines, tests ≈ **251**). Excluded per the chain metric: openspec docs,
+comment-only lines, blank lines.
+
+## Files touched (2a-ii-b, uncommitted)
+
+- **New (3):** `src/server/api/members.int.spec.ts`, `src/server/api/toggles.int.spec.ts`,
+  `src/server/data/repositories/members.ts`
+- **Modified (2):** `src/server/api/index.ts` (+20/−0 — `GET/POST /events/:id/members`),
+  `src/server/api/write-validation.ts` (+17/−0 — `parseMemberInput` + type import)
+- **Plus docs:** `openspec/.../tasks.md` (2a.6–2a.10 checked), this file
+- **Untouched:** `prisma/**` (members ride on `User` + `EventAssignment`, no migration),
+  `src/server/api/authz.ts` (S8 `canWriteObject`/`canWriteEvent` + `canReadEvent` reused
+  unchanged), `src/server.ts`, every prior-batch file, all client feature code

@@ -416,29 +416,47 @@ renumbered — the BR trace table and every spec reference stay valid.**
       `photoRowWriteScope` via `photoEventId` for the row), assigned-admin only, generic 400
       via `badRequest`, mass-assignment immunity asserted. Mutation-verified 6/6 — see
       apply-progress §PR-2a-ii-a.)_
-- [ ] **2a.6** _[2a-ii]_ **Test-first (RED):** write `src/server/api/members.int.spec.ts` —
+- [x] **2a.6** _[2a-ii]_ **Test-first (RED):** write `src/server/api/members.int.spec.ts` —
       admin of event A creates a `security` user scoped to A (usable as trusted context);
       provider cannot create security/second-admin directly; provider CAN read permission
       holders for any event. _Traces: BR-06 → spec req 5 (all 3 scenarios)._
-- [ ] **2a.7** _[2a-ii]_ Implement `GET/POST /api/events/:id/members` per the design §5
+      _(✅ RED captured: 9 failed (9), every test `expected 404 to be …` on the route-less
+      tree; GREEN 9/9 after 2a.7 — see apply-progress §PR-2a-ii-b.)_
+- [x] **2a.7** _[2a-ii]_ Implement `GET/POST /api/events/:id/members` per the design §5
       matrix. 🚧 after 2a.6.
-- [ ] **2a.8** _[2a-ii]_ **Test-first (RED):** write toggle scenarios in
+      _(✅ GET = `eventAccess('content')` (provider any; assigned admin); POST =
+      `eventWriteScope` (assigned admin only, provider forbidden) + `parseMemberInput`
+      fixing the role to `security` (a direct second-admin payload → generic 400 even for
+      the own admin — BR-05 is the only path) + `createSecurityMember` building the user
+      and assignment atomically with a server-generated id. Mutation-verified 4/4 — see
+      apply-progress §PR-2a-ii-b.)_
+- [x] **2a.8** _[2a-ii]_ **Test-first (RED):** write toggle scenarios in
       `src/server/api/toggles.int.spec.ts` — admin deactivates a guest of own event → record
       persists with `active:false`; toggling back restores previous state with all other
       fields unchanged; sibling rows unaffected; cross-event toggle rejected; **any admin
       delete attempt (event or record) rejected with records intact** (no admin-reachable
       DELETE route). _Traces: BR-13 → spec req 12 (all 3 scenarios) + spec req 11 scenario 3._
-- [ ] **2a.9** _[2a-ii]_ Verify the toggle/no-delete behavior of the implemented PATCH routes
+      _(✅ 5 tests: req 12 all 3 scenarios (full-row-equality reversibility) + req 11
+      scenario 3 + a structural BR-13 pin — zero DELETE routes registered on `apiRouter`
+      (admin DELETE → 404, all counts intact). Honest note: 4/5 were already GREEN against
+      the 2a-i/2a-ii-a PATCH routes (their RED was pre-verified by mutation in those
+      batches); the delete test's only failure cycle was a wrong seed-photo-count constant
+      in the test itself — see apply-progress §PR-2a-ii-b.)_
+- [x] **2a.9** _[2a-ii]_ Verify the toggle/no-delete behavior of the implemented PATCH routes
       against 2a.8 (they may already be green from 2a.5 — close the RED/GREEN loop explicitly).
-- [ ] **2a.10** _[gate for both sub-PRs]_ Run the PR verification gate (ground rule 2). Note in
+      _(✅ Loop closed explicitly: 2a.8 suite run against the prior-batch tree — guest PATCH
+      (2a-i) and photo PATCH (2a-ii-a) scenarios already GREEN; no-delete satisfied by the
+      absence of any DELETE route; mutation M3 (updateGuest overwrites an untouched field)
+      kills the reversibility test, proving the already-green suite has teeth.)_
+- [x] **2a.10** _[gate for both sub-PRs]_ Run the PR verification gate (ground rule 2). Note in
       PR body: every event-scoped endpoint now has a server-side rejection test (proposal
       success criterion 3 is validated again end-to-end in PR-4's sweep).
-      _(Unchecked after review: the gates are green for 2a-i, but 2a.10 also covers 2a.4/2a.5,
-      which stay open until the photos half lands in 2a-ii — re-run the gate at the end of
-      2a-ii.)_
-      _(Update at 2a-ii-a: all 7 gates re-run green after the photos half landed — 144 unit /
-      107 int / both `tsc` projects / build / prettier / 57-57 parity — and 2a.4 + 2a.5 are now
-      checked. Checkbox stays OPEN until members + toggles (2a.6–2a.9, 2a-ii-b) close 2a-ii.)_
+      _(✅ all 7 gates re-run green with 2a.6–2a.9 included: 144 unit / **121 int** (107 →
+      121: +9 members, +5 toggles) / both `tsc` projects exit 0 / build exit 0 / prettier 0
+      unformatted / parity 57-57. Every event-scoped endpoint existing today carries a
+      server-side rejection test (events-write, scope, members, toggles suites); the PR-4
+      sweep re-validates per the task's own clause. **2a-ii closed** — see apply-progress
+      §PR-2a-ii-b for the mutation table and code-line count 309/400.)_
 
 **Suggested work-unit commits — 2a-i:**
 

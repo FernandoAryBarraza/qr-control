@@ -9,6 +9,7 @@ import {
   listEvents,
 } from '../data/repositories/events';
 import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repositories/guests';
+import { createSecurityMember, listMembers } from '../data/repositories/members';
 import { createPhoto, listPhotos, photoEventId, updatePhoto } from '../data/repositories/photos';
 import { canCreateEvent, canReadEvent, canWriteObject, resolveEventScope } from './authz';
 import { callerContext, callerOf } from './caller-context';
@@ -16,6 +17,7 @@ import {
   parseEventInput,
   parseGuestInput,
   parseGuestPatch,
+  parseMemberInput,
   parsePhotoInput,
   parsePhotoPatch,
 } from './write-validation';
@@ -181,4 +183,22 @@ apiRouter.patch('/photos/:id', callerContext, photoRowWriteScope, async (req, re
     return;
   }
   res.json(await updatePhoto(pathId(req), parsed.value));
+});
+
+// GET /api/events/:id/members — provider any; assigned admin (BR-06 / spec req 5,
+// scenario 3): the current admins and security staff of the event.
+apiRouter.get('/events/:id/members', callerContext, eventAccess('content'), async (req, res) => {
+  res.json(await listMembers(pathId(req)));
+});
+
+// POST /api/events/:id/members — assigned admin only, `security` role only (BR-06 /
+// spec req 5): the provider cannot create lower roles, and a second admin goes
+// through the BR-05 approval flow, never this route (design §5: scope + role).
+apiRouter.post('/events/:id/members', callerContext, eventWriteScope, async (req, res) => {
+  const parsed = parseMemberInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  res.status(201).json(await createSecurityMember(pathId(req), parsed.value));
 });
