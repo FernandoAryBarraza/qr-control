@@ -90,6 +90,28 @@ describe('admin soft toggles and no-delete (spec req 12 / req 11 scenario 3 / BR
     ).toEqual(siblings); // exactly one row toggled (req 12, scenario 3)
   });
 
+  // PR-2b contract completion: `dl` (downloaded) is now part of the PATCH surface
+  // so the admin UI's download toggle persists instead of staying in-memory.
+  it('toggles the photo download flag (dl) and persists it', async () => {
+    const before = (await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } }))
+      .downloaded;
+
+    const res = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, { dl: !before });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: 'ph-001', dl: !before });
+
+    expect(
+      (await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } })).downloaded,
+    ).toBe(!before);
+
+    // Reversible: patching back restores the previous flag.
+    const back = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, { dl: before });
+    expect(back.status).toBe(200);
+    expect(
+      (await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } })).downloaded,
+    ).toBe(before);
+  });
+
   it('rejects a cross-event toggle with the row unchanged', async () => {
     const guestBefore = await getPrisma().guest.findUniqueOrThrow({ where: { id: 'g-001' } });
     const photoBefore = await getPrisma().photo.findUniqueOrThrow({ where: { id: 'ph-001' } });

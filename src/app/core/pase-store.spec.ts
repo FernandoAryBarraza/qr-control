@@ -173,3 +173,226 @@ describe('PaseStore.load() — hydration-safe client read path', () => {
     expect(toast.toasts()[0]?.kind).toBe('warn');
   });
 });
+
+describe('PaseStore mutations — optimistic updates with API persistence (PR-2b)', () => {
+  let http: HttpTestingController;
+  let store: PaseStore;
+  let toast: ToastService;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    http = TestBed.inject(HttpTestingController);
+    store = TestBed.inject(PaseStore);
+    toast = TestBed.inject(ToastService);
+  });
+
+  afterEach(() => http.verify());
+
+  /** Loads the DB-shaped fixtures so mutations run against persisted `g-*`/`ph-*` rows. */
+  async function loadDb(): Promise<void> {
+    const pending = store.load();
+    http.expectOne('/api/events').flush([DB_EVENT]);
+    await settle();
+    http.expectOne('/api/events/ev-001/guests').flush(DB_GUESTS);
+    http.expectOne('/api/events/ev-001/photos').flush(DB_PHOTOS);
+    await pending;
+  }
+
+  const guestStatus = (id: string): string | undefined =>
+    store.guests().find((g) => g.id === id)?.status;
+
+  const photoOf = (id: string): EventPhoto | undefined => store.photos().find((p) => p.id === id);
+
+  it('sendInvite patches the guest optimistically and keeps it on success', async () => {
+    await loadDb();
+
+    store.sendInvite('g-003'); // planned -> sent
+
+    // Optimistic: the signal flips synchronously, before the server confirms.
+    expect(guestStatus('g-003')).toBe('sent');
+
+    const req = http.expectOne('/api/guests/g-003');
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ status: 'sent' });
+    expect(req.request.headers.get('x-user-id')).toBe('usr-002'); // assigned admin writes
+    req.flush({ ...DB_GUESTS[2], status: 'sent' });
+    await settle();
+
+    expect(guestStatus('g-003')).toBe('sent');
+    expect(toast.toasts()).toHaveLength(1);
+    expect(toast.toasts()[0]?.kind).toBe('ok');
+  });
+
+  it('sendInvite reverts the guest and warns when the API rejects', async () => {
+    await loadDb();
+
+    store.sendInvite('g-003');
+    expect(guestStatus('g-003')).toBe('sent'); // optimistic
+
+    http
+      .expectOne('/api/guests/g-003')
+      .flush({ message: 'nope' }, { status: 403, statusText: 'Forbidden' });
+    await settle();
+
+    expect(guestStatus('g-003')).toBe('planned'); // reverted
+    expect(toast.toasts()).toHaveLength(1);
+    expect(toast.toasts()[0]?.kind).toBe('warn');
+  });
+
+  it('confirmGuest patches status and adds passes optimistically, keeping both on success', async () => {
+    await loadDb();
+
+    store.confirmGuest('g-003');
+    expect(guestStatus('g-003')).toBe('confirmed');
+    expect(store.passPool().map((p) => p.code)).toContain('g-003'); // optimistic pass
+
+    const req = http.expectOne('/api/guests/g-003');
+    expect(req.request.body).toEqual({ status: 'confirmed' });
+    req.flush({ ...DB_GUESTS[2], status: 'confirmed' });
+    await settle();
+
+    expect(guestStatus('g-003')).toBe('confirmed');
+    expect(store.passPool().map((p) => p.code)).toContain('g-003');
+    expect(toast.toasts()[0]?.kind).toBe('ok');
+  });
+
+  it('confirmGuest reverts both status and pass pool when the API rejects', async () => {
+    await loadDb();
+    const poolBefore = store.passPool().map((p) => p.code);
+
+    store.confirmGuest('g-003');
+    http
+      .expectOne('/api/guests/g-003')
+      .flush({ message: 'nope' }, { status: 500, statusText: 'Server Error' });
+    await settle();
+
+    expect(guestStatus('g-003')).toBe('planned');
+    expect(store.passPool().map((p) => p.code)).toEqual(poolBefore); // pool restored
+    expect(toast.toasts()[0]?.kind).toBe('warn');
+  });
+
+  it('setPhotoState patches the photo state optimistically and keeps it on success', async () => {
+    await loadDb();
+
+    store.setPhotoState('ph-001', 'rejected'); // approved -> rejected
+    expect(photoOf('ph-001')?.state).toBe('rejected');
+
+    const req = http.expectOne('/api/photos/ph-001');
+    expect(req.request.body).toEqual({ state: 'rejected' });
+    req.flush({ ...DB_PHOTOS[0], state: 'rejected' });
+    await settle();
+
+    expect(photoOf('ph-001')?.state).toBe('rejected');
+    expect(toast.toasts()[0]?.kind).toBe('warn'); // rejected toast is a warning
+  });
+
+  it('setPhotoState reverts the photo and warns when the API rejects', async () => {
+    await loadDb();
+
+    store.setPhotoState('ph-001', 'rejected');
+    http
+      .expectOne('/api/photos/ph-001')
+      .flush({ message: 'nope' }, { status: 500, statusText: 'Server Error' });
+    await settle();
+
+    expect(photoOf('ph-001')?.state).toBe('approved'); // reverted
+    expect(toast.toasts()[0]?.kind).toBe('warn');
+  });
+
+  it('toggleDownload patches dl optimistically and keeps it on success', async () => {
+    await loadDb();
+
+    store.toggleDownload('ph-001'); // dl false -> true
+    expect(photoOf('ph-001')?.dl).toBe(true);
+
+    const req = http.expectOne('/api/photos/ph-001');
+    expect(req.request.body).toEqual({ dl: true });
+    req.flush({ ...DB_PHOTOS[0], dl: true });
+    await settle();
+
+    expect(photoOf('ph-001')?.dl).toBe(true);
+    expect(toast.toasts()[0]?.kind).toBe('ok');
+  });
+
+  it('toggleDownload reverts dl and warns when the API rejects', async () => {
+    await loadDb();
+
+    store.toggleDownload('ph-001');
+    http
+      .expectOne('/api/photos/ph-001')
+      .flush({ message: 'nope' }, { status: 500, statusText: 'Server Error' });
+    await settle();
+
+    expect(photoOf('ph-001')?.dl).toBe(false); // reverted
+    expect(toast.toasts()[0]?.kind).toBe('warn');
+  });
+
+  it('setGuestActive patches the active flag optimistically and reverts it when the API rejects', async () => {
+    await loadDb();
+
+    store.setGuestActive('g-001', false);
+    expect(store.guests().find((g) => g.id === 'g-001')?.active).toBe(false); // optimistic
+
+    const req = http.expectOne('/api/guests/g-001');
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ active: false });
+    expect(req.request.headers.get('x-user-id')).toBe('usr-002');
+    req.flush({ message: 'nope' }, { status: 403, statusText: 'Forbidden' });
+    await settle();
+
+    expect(store.guests().find((g) => g.id === 'g-001')?.active).toBeUndefined(); // reverted
+    expect(toast.toasts()[0]?.kind).toBe('warn');
+  });
+
+  it('setPhotoActive patches the active flag optimistically and reverts it when the API rejects', async () => {
+    await loadDb();
+
+    store.setPhotoActive('ph-001', false);
+    expect(photoOf('ph-001')?.active).toBe(false); // optimistic
+
+    const req = http.expectOne('/api/photos/ph-001');
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ active: false });
+    expect(req.request.headers.get('x-user-id')).toBe('usr-002');
+    req.flush({ message: 'nope' }, { status: 403, statusText: 'Forbidden' });
+    await settle();
+
+    expect(photoOf('ph-001')?.active).toBeUndefined(); // reverted
+    expect(toast.toasts()[0]?.kind).toBe('warn');
+  });
+
+  it('setGuestActive keeps the flag on API success', async () => {
+    await loadDb();
+
+    store.setGuestActive('g-001', false);
+    expect(store.guests().find((g) => g.id === 'g-001')?.active).toBe(false); // optimistic
+
+    const req = http.expectOne('/api/guests/g-001');
+    expect(req.request.body).toEqual({ active: false });
+    req.flush({ ...DB_GUESTS[0], active: false });
+    await settle();
+
+    expect(store.guests().find((g) => g.id === 'g-001')?.active).toBe(false); // kept
+    // Deactivation intentionally uses the warn-styled toast (circleSlash), like
+    // the revert styling, so pin the message, not just the kind.
+    expect(toast.toasts()[0]?.message).toBe('Invitado desactivado');
+  });
+
+  it('setPhotoActive keeps the flag on API success', async () => {
+    await loadDb();
+
+    store.setPhotoActive('ph-001', false);
+    expect(photoOf('ph-001')?.active).toBe(false); // optimistic
+
+    const req = http.expectOne('/api/photos/ph-001');
+    expect(req.request.body).toEqual({ active: false });
+    req.flush({ ...DB_PHOTOS[0], active: false });
+    await settle();
+
+    expect(photoOf('ph-001')?.active).toBe(false); // kept
+    // Same deliberate warn-styled toast as the guest deactivation path.
+    expect(toast.toasts()[0]?.message).toBe('Foto desactivada');
+  });
+});

@@ -482,16 +482,29 @@ PR-2a (endpoints).
 
 Dependency position: `1a → 1b → 1c → 1d → 2a → 📍 2b → 3a → 3b → 4`
 
-- [ ] **2b.1** **Test-first (RED):** extend/author `pase-store` mutation specs — each mutation
+- [x] **2b.1** **Test-first (RED):** extend/author `pase-store` mutation specs — each mutation
       (`sendInvite`, `confirmGuest`, `setPhotoState`, `toggleDownload`, active toggles) calls
       the API through `DataApiService`, applies the signal update optimistically, and reverts
-      on API error. _Traces: proposal §What Changes 5; success criterion 1 (persistence)._
-- [ ] **2b.2** Implement the `DataApiService` mutation methods + rewire `PaseStore` mutation
+      on API error. _Traces: proposal §What Changes 5; success criterion 1 (persistence)._ —
+      8 core mutation specs RED against the in-memory store (**8 failed / 144 passed**), each
+      `found none` on the expected `PATCH` (see apply-progress §PR-2b).
+- [x] **2b.2** Implement the `DataApiService` mutation methods + rewire `PaseStore` mutation
       methods to them (immutable `update()` calls kept). Keep `FeedService` simulated scans
-      ephemeral (exploration Q2). 🚧 after 2b.1.
+      ephemeral (exploration Q2). 🚧 after 2b.1. — `patchGuest`/`patchPhoto` (admin header
+      `usr-002`) + `persist()` optimistic-with-revert helper; 6 mutations wired; server `dl`
+      PATCH completed (`toggleDownload` had no persistable field before); **157 unit / 123
+      int** green. `FeedService` scans untouched.
 - [ ] **2b.3** Manual acceptance: mutate a guest/photo in the dev app, reload → mutation
-      persisted (proposal success criterion 1). Record evidence in the PR description.
-- [ ] **2b.4** Run the PR verification gate (ground rule 2).
+      persisted (proposal success criterion 1). Record evidence in the PR description. —
+      **box deliberately UNchecked (review W4): the literal demand is a manual dev-app
+      run.** What exists instead is an automated integration proxy
+      (`client-mutations.int.spec.ts` replays the store's exact write payloads against the
+      real server, then reads them back through the `load()` GETs → 1 passed). **No manual
+      dev-app/browser acceptance was performed or claimed**; the manual run remains open
+      for the human.
+- [x] **2b.4** Run the PR verification gate (ground rule 2). — all 7 gates green (159 unit /
+      123 int / tsc app 0 / tsc spec 0 / build 0 / prettier clean / parity 57–57) after the
+      review-correction batch (see apply-progress §PR-2b correction note).
 
 **Suggested work-unit commits:**
 

@@ -1413,3 +1413,156 @@ comment-only lines, blank lines.
 - **Untouched:** `prisma/**` (members ride on `User` + `EventAssignment`, no migration),
   `src/server/api/authz.ts` (S8 `canWriteObject`/`canWriteEvent` + `canReadEvent` reused
   unchanged), `src/server.ts`, every prior-batch file, all client feature code
+
+---
+
+# PR-2b — Client mutation wiring (optimistic updates)
+
+**Goal (tasks.md):** store mutations become API calls with optimistic signal updates;
+reload preserves mutations. **Scope:** `sendInvite`, `confirmGuest`, `setPhotoState`,
+`toggleDownload` + the active toggles. `FeedService` simulated scans stay ephemeral
+(exploration Q2) — untouched. `applyPlan` is **not** in the task's mutation list and has
+no server endpoint (storage counters are client-owned, design §3; event PATCH is PR-4) —
+it stays in-memory, documented.
+
+## Contract gaps discovered and resolved (2b.1 → 2b.2)
+
+Writing the RED specs surfaced three real gaps between the task's intent and the
+shipped PR-2a server contract. Each was closed honestly, not papered over:
+
+1. **`dl` was not patchable.** `PATCH /api/photos/:id` accepted only `{state, active}`;
+   `dl` (downloaded) existed solely in the POST input, so `toggleDownload` had **no**
+   server field to persist to. Closed by extending the PATCH contract —
+   `parsePhotoPatch` accepts an optional boolean `dl`, `PhotoPatchInput` gains
+   `dl?: boolean`, `updatePhoto` maps it to the `downloaded` column (+ a persistence
+   test in `toggles.int.spec.ts`). Without this, wiring `toggleDownload` to the API
+   would 400 on every call.
+2. **Writes need the admin identity.** `canWriteObject`/`canWriteEvent` require
+   `role: 'admin'` + assignment; the client hard-coded `x-user-id: usr-001` (provider),
+   so every mutation would 403. `DataApiService` now sends the seeded admin `usr-002`
+   (admin of `ev-001`, owner of all `g-*`/`ph-*` rows) on writes via a separate
+   `adminCaller` header; reads keep acting as the provider. Honest for the no-auth
+   prototype — resolving the caller's own admin id per event belongs to the auth stage.
+3. **"Active toggles" had no client surface.** The store had no active-toggle method and
+   the admin view no toggle control, though the server supports `{active}` (BR-13,
+   pinned by `toggles.int.spec.ts`). Added `setGuestActive`/`setPhotoActive` wired to the
+   API so the enumerated surface is complete and tested; they are **UI-unwired** today
+   (a future control is a one-line binding).
+
+## Honest TDD account
+
+- **2b.1 (RED): true RED→GREEN, captured in-session.** The 8 core store mutation specs
+  (sendInvite/confirmGuest/setPhotoState/toggleDownload × success+revert) were written
+  first against the in-memory-only store → `npm run test:unit` → **8 failed (144 passed
+  baseline)**, every failure `Expected one matching request for criteria "Match URL:
+/api/guests/…", found none` — the store issued no PATCH. (The 2 active-toggle specs
+  were held back for this capture because `setGuestActive`/`setPhotoActive` did not exist
+  yet — a compile error would have masked the runtime RED; they were added in 2b.2 with
+  the methods.)
+- **2b.2 (GREEN):** implemented the server `dl` completion, `DataApiService.patchGuest/
+patchPhoto`, and rewired the store through a shared `persist()` helper (optimistic
+  apply → API call → success toast, or revert + warn toast on failure) → **157 passed**.
+  `DataApiService` mutation specs (3) were added alongside the methods.
+- **2b.3 (reload persistence): automated proxy, not a manual claim.** The task's clause is
+  a manual dev-app acceptance; the closest automated equivalent written instead is
+  `client-mutations.int.spec.ts`, which replays the store's **exact** write payloads
+  (admin `usr-002`, `{status:'sent'}`/`{status:'confirmed'}`/`{state:'rejected'}`/
+  `{dl:true}`/`{active:false}`) against the **real** Express+SQLite server, then reads
+  back through the same GETs `load()` uses → **1 passed**. No browser/manual acceptance
+  was performed or claimed.
+
+## Status
+
+| Task                        | Status            | Verification                                                                                                                                                                                                                                                                       |
+| --------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2b.1 mutation specs RED     | ✅                | 8 store mutation specs RED against the in-memory store (**8 failed / 144 passed**), each `found none` on the expected `PATCH /api/guests/:id` or `PATCH /api/photos/:id`                                                                                                           |
+| 2b.2 DataApi + store rewire | ✅                | `patchGuest`/`patchPhoto` (admin header `usr-002`) + `persist()` optimistic-with-revert helper; 6 mutations wired (`sendInvite`, `confirmGuest`, `setPhotoState`, `toggleDownload`, `setGuestActive`, `setPhotoActive`); server `dl` PATCH completed; **157 unit / 123 int** green |
+| 2b.3 reload persistence     | 🚧 pending manual | Automated proxy only (`client-mutations.int.spec.ts` replays the client payloads and reads them back through the load() GETs → **1 passed**); the task's literal manual browser acceptance was NOT performed — box deliberately unchecked (review W4)                              |
+| 2b.4 PR verification gate   | ✅                | All 7 gates re-run green with PR-2b included (table below)                                                                                                                                                                                                                         |
+
+## Mutation-verification (3/3 guards killed — full unit suite per mutant)
+
+Each mutant: one precise edit to `pase-store.ts` `persist()` → `npm run test:unit` →
+named tests RED → restore → `sha256sum` byte-identical to the pre-campaign hash
+`e1188ab9…c5579e`.
+
+| #   | Mutant (one new guard weakened)                        | Expected RED tests killed                       | Observed (failed / 157)                                                                                                                                                      | Restored |
+| --- | ------------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| M1  | `persist` drops `revert()` in the `catch`              | the revert-on-error specs                       | **6 failed** — exactly the 6 revert specs (`sendInvite`/`confirmGuest`/`setPhotoState`/`toggleDownload`/`setGuestActive`/`setPhotoActive` reverts)                           | hash OK  |
+| M2  | `persist` drops the API call (`await Promise.resolve`) | every mutation must issue a PATCH               | **10 failed** — all 10 mutation specs, each `found none` on the expected PATCH                                                                                               | hash OK  |
+| M3  | `persist` drops the optimistic `apply()`               | the signal must flip before the server confirms | **10 failed** — 7 at the optimistic assertion (`Expected: "sent", Received: "planned"`); the 3 revert-only specs cascade via the un-flushed request tripping `http.verify()` | hash OK  |
+
+Post-campaign `sha256sum src/app/core/pase-store.ts` =
+`e1188ab9621b39e117eb3dba3309e99135ef2c30d5d847d4cd7ec7e569c5579e` — identical to the
+pre-campaign baseline; the tree left the campaign exactly as it entered it.
+
+## Verification gates (actual output)
+
+| Gate                                         | Result                                                                                                  |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `npm run test:unit`                          | **11 files / 159 tests passed** (144 baseline + 13 PR-2b + 2 correction)                                |
+| `npm run test:int`                           | **12 files / 123 tests passed** (121 baseline + 1 dl + 1 reload; correction adds assertions, not tests) |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                                                              |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                                                              |
+| `npm run build`                              | exit **0** — bundle generated, no NG05xx                                                                |
+| `npx prettier --check .`                     | **exit 0, 0 unformatted files** (post-correction: see note below)                                       |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                                                     |
+
+## Code-line count vs 400 budget (code only, excl. comments/blank — chain metric)
+
+| Unit                                                                                  | Lines             |
+| ------------------------------------------------------------------------------------- | ----------------- |
+| `api/client-mutations.int.spec.ts` (new, whole file)                                  | 37                |
+| `app/core/pase-store.ts` (diff delta — persist + rewire)                              | +106/−25 → **81** |
+| `app/core/api/data-api.service.ts` (diff delta — patch methods + admin header)        | +26/−1 → **25**   |
+| `app/core/pase-store.spec.ts` (diff delta — mutation specs + correction success-keep) | +166 → **166**    |
+| `app/core/api/data-api.service.spec.ts` (diff delta — patch specs)                    | +26 → **26**      |
+| `server/api/write-validation.ts` (diff delta — `dl` in parsePhotoPatch)               | +4/−1 → **3**     |
+| `server/data/repositories/photos.ts` (diff delta — `dl` in patch input/update)        | +2 → **2**        |
+| `server/api/toggles.int.spec.ts` (diff delta — `dl` persistence test)                 | +15 → **15**      |
+| `server/api/scope.int.spec.ts` (diff delta — correction `badPatchDl` 400)             | +3 → **3**        |
+| **Total**                                                                             | **358**           |
+
+**358 ≤ 400 — within budget** (production ≈ **111** code lines — service methods, store
+rewire, server `dl` completion; tests ≈ **247**). Excluded per the chain metric: openspec
+docs, comment-only lines, blank lines.
+
+## Files touched (PR-2b, uncommitted)
+
+- **New (1):** `src/server/api/client-mutations.int.spec.ts` (reload-persistence proxy)
+- **Modified (8):** `src/app/core/pase-store.ts` (+106/−25), `src/app/core/api/
+data-api.service.ts` (+26/−1), `src/app/core/pase-store.spec.ts` (+166/−0),
+  `src/app/core/api/data-api.service.spec.ts` (+26/−0),
+  `src/server/api/write-validation.ts` (+4/−1), `src/server/data/repositories/photos.ts`
+  (+2/−0), `src/server/api/toggles.int.spec.ts` (+15/−0),
+  `src/server/api/scope.int.spec.ts` (+3 code lines — correction)
+- **Plus docs:** `openspec/.../tasks.md` (2b.1/2b.2/2b.4 checked; 2b.3 deliberately
+  unchecked pending the manual run), this file
+- **Untouched:** `FeedService` simulated scans (exploration Q2 — ephemeral by design),
+  `applyPlan` (in-memory — no server event PATCH until PR-4), `authz.ts`, `index.ts`,
+  `caller-context.ts`, every prior-batch file, all client feature/UI code
+
+## Review-correction note (fresh-context adversarial review → BLOCK → fixed)
+
+The pre-commit adversarial review verdict was **BLOCK — 1 CRITICAL + 5 WARNING**. All
+findings were fixed in one correction batch before commit; evidence below.
+
+| Finding                                                                                                                                                                                        | Fix                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C1** prettier gate claimed green but measurably exit 1 on this file (unaligned tables + a raw `\|` inside the Status-table cell `PATCH /api/guests\|photos/:id` breaking the rendered table) | Pipe reworded to two literals; `prettier --write` applied; gate now truly exit 0                                                                                                                      |
+| **W1** the 2b.3 proxy replayed `{dl:true}` on `ph-001`, whose seed row is already `dl:true` — a **no-op** blind to a dropped `dl` persist (reviewer's mutant survived)                         | Proxy now replays `{dl:false}` (a real toggle) and asserts `dl:false` after reload                                                                                                                    |
+| **W2** revert-clobber race: `persist()`'s revert restores the whole pre-mutation array; two concurrent mutations → a failed A reverts B's confirmed UI state (server keeps it)                 | **Accepted, not fixed** — demo-scope single-user prototype; recorded as a known limitation. Success path is race-safe (HTTP response never applied). Revert-per-id belongs to a future hardening pass |
+| **W3** `{dl:'yes'} → 400` untested — the mutant dropping the `dl` type check survived the full int suite (only `tsc` killed it)                                                                | Added `{dl:'yes'} → 400` to the invalid-photo-patch cluster in `scope.int.spec.ts`                                                                                                                    |
+| **W4** 2b.3 box over-checked (task's literal demand is a manual dev-app run)                                                                                                                   | Box **unchecked** with an honest annotation; proxy documented as the automated stand-in                                                                                                               |
+| **W5** `setGuestActive`/`setPhotoActive` lacked success-keep specs (only optimistic+revert)                                                                                                    | Two success-keep specs added (deactivation uses the deliberate warn-styled toast — pinned by message, not kind)                                                                                       |
+
+Corrections ran `test:unit` (157 → **159**, two new success-keep specs) and `test:int`
+(unchanged at **123** — W3 adds assertions inside the existing invalid-patch test, not a
+new test) green. The
+remaining suggestions (S1 error-type surfacing, S2 `apply()` outside `try`, S3 shared
+payload constants, S4 end-to-end 403-revert) are recorded for a future hardening pass and
+do not block.
+
+**Chain line-count metric (unified definition, resolves the prior 303-vs-309 ambiguity):**
+net added lines excluding blank and comment-only lines (`//`, `/*…*/`, `*`); per modified
+file = diff-added minus diff-removed under that filter; new files counted whole.

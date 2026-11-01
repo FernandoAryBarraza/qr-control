@@ -45,10 +45,15 @@ export interface PhotoWriteInput {
   readonly big: string | null;
 }
 
-/** Write contract for PATCH /api/photos/:id (state/active only — BR-13, no delete). */
+/**
+ * Write contract for PATCH /api/photos/:id (state/active/dl — BR-13, no delete).
+ * `dl` maps to the `downloaded` column; it was POST-only until PR-2b completed
+ * the contract so `toggleDownload` could persist.
+ */
 export interface PhotoPatchInput {
   readonly state?: PhotoState;
   readonly active?: boolean;
+  readonly dl?: boolean;
 }
 
 export async function createPhoto(eventId: string, input: PhotoWriteInput): Promise<EventPhoto> {
@@ -86,6 +91,7 @@ export async function updatePhoto(id: string, patch: PhotoPatchInput): Promise<E
     data: {
       ...(patch.state === undefined ? {} : { state: patch.state }),
       ...(patch.active === undefined ? {} : { active: patch.active }),
+      ...(patch.dl === undefined ? {} : { downloaded: patch.dl }),
     },
   });
   return toPhoto(photo);

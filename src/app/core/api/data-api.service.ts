@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import type { EventPhoto, Guest, PaseEvent } from '../models';
+import type { EventPhoto, Guest, GuestStatus, PaseEvent, PhotoState } from '../models';
 
 /**
  * Trusted caller identity for every read (design §2, "no auth in this change"):
@@ -11,6 +11,28 @@ import type { EventPhoto, Guest, PaseEvent } from '../models';
  * calling" until a real auth layer swaps the extractor (one function, design §2).
  */
 const TRUSTED_USER_ID = 'usr-001';
+
+/**
+ * Writes are admin-only server-side (BR-13: `canWriteObject` requires the
+ * assigned admin). With no auth layer yet, mutations act as the seeded event
+ * admin so the demo can persist; reads keep acting as the provider. A single
+ * trusted identity is honest for the no-auth prototype — resolving the caller's
+ * own admin id per event belongs to the future auth stage.
+ */
+const TRUSTED_ADMIN_ID = 'usr-002';
+
+/** `PATCH /api/guests/:id` payload — status and/or the BR-13 active flag. */
+export interface GuestPatch {
+  readonly status?: GuestStatus;
+  readonly active?: boolean;
+}
+
+/** `PATCH /api/photos/:id` payload — state, active and/or the download flag. */
+export interface PhotoPatch {
+  readonly state?: PhotoState;
+  readonly active?: boolean;
+  readonly dl?: boolean;
+}
 
 /**
  * Browser-side read path to the standalone REST API (design §4):
@@ -48,7 +70,27 @@ export class DataApiService {
     );
   }
 
+  /** `PATCH /api/guests/:id` — admin write (status/active). Returns the updated guest. */
+  patchGuest(id: string, patch: GuestPatch): Promise<Guest> {
+    const sid = encodeURIComponent(id);
+    return firstValueFrom(
+      this.http.patch<Guest>(`/api/guests/${sid}`, patch, { headers: this.adminCaller }),
+    );
+  }
+
+  /** `PATCH /api/photos/:id` — admin write (state/active/dl). Returns the updated photo. */
+  patchPhoto(id: string, patch: PhotoPatch): Promise<EventPhoto> {
+    const sid = encodeURIComponent(id);
+    return firstValueFrom(
+      this.http.patch<EventPhoto>(`/api/photos/${sid}`, patch, { headers: this.adminCaller }),
+    );
+  }
+
   private get caller(): Record<string, string> {
     return { 'x-user-id': TRUSTED_USER_ID };
+  }
+
+  private get adminCaller(): Record<string, string> {
+    return { 'x-user-id': TRUSTED_ADMIN_ID };
   }
 }

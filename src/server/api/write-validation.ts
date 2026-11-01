@@ -227,21 +227,29 @@ export function parsePhotoInput(body: unknown): ParseResult<PhotoWriteInput> {
   return { ok: true, value: { url, author, state, dl, size, h, big } };
 }
 
-/** PATCH /api/photos/:id — state and/or active only (BR-13 toggle, never a delete). */
+/**
+ * PATCH /api/photos/:id — state, active and/or download flag (BR-13 toggle, never
+ * a delete). `dl` is the legacy download flag the admin UI flips; it was writable
+ * via POST but omitted from the PATCH contract, so `toggleDownload` had no way to
+ * persist (PR-2b contract completion).
+ */
 export function parsePhotoPatch(body: unknown): ParseResult<PhotoPatchInput> {
   if (!isRecord(body)) return FAIL;
 
   const state = body['state'];
   const active = body['active'];
-  if (state === undefined && active === undefined) return FAIL;
+  const dl = body['dl'];
+  if (state === undefined && active === undefined && dl === undefined) return FAIL;
   if (state !== undefined && !isPhotoState(state)) return FAIL;
   if (active !== undefined && typeof active !== 'boolean') return FAIL;
+  if (dl !== undefined && typeof dl !== 'boolean') return FAIL;
 
   return {
     ok: true,
     value: {
       ...(state === undefined ? {} : { state }),
       ...(active === undefined ? {} : { active }),
+      ...(dl === undefined ? {} : { dl }),
     },
   };
 }

@@ -97,4 +97,39 @@ describe('DataApiService', () => {
 
     await expect(pending).rejects.toBeDefined();
   });
+
+  it('patches a guest through PATCH /api/guests/:id with the admin caller header', async () => {
+    const patched: Guest = { ...GUEST, status: 'sent' };
+    const pending = api.patchGuest('g-001', { status: 'sent' });
+
+    const req = http.expectOne('/api/guests/g-001');
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ status: 'sent' });
+    expect(req.request.headers.get('x-user-id')).toBe('usr-002'); // assigned admin writes
+    req.flush(patched);
+
+    await expect(pending).resolves.toEqual(patched);
+  });
+
+  it('patches a photo through PATCH /api/photos/:id (state/dl/active)', async () => {
+    const pending = api.patchPhoto('ph-001', { dl: true });
+
+    const req = http.expectOne('/api/photos/ph-001');
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ dl: true });
+    expect(req.request.headers.get('x-user-id')).toBe('usr-002');
+    req.flush({ ...PHOTO, dl: true });
+
+    await expect(pending).resolves.toEqual({ ...PHOTO, dl: true });
+  });
+
+  it('propagates PATCH rejections so the store can revert the optimistic update', async () => {
+    const pending = api.patchGuest('g-001', { status: 'sent' });
+
+    http
+      .expectOne('/api/guests/g-001')
+      .flush({ message: 'nope' }, { status: 403, statusText: 'Forbidden' });
+
+    await expect(pending).rejects.toBeDefined();
+  });
 });

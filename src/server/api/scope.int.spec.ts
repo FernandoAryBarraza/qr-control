@@ -438,6 +438,12 @@ describe('object-level photo scope (spec req 3, scenarios 3-4; req 12; req 14)',
     expect(badActive.status).toBe(400);
     expect(await badActive.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
 
+    // `dl` joined the patch contract in PR-2b — its type rejection is pinned here
+    // so a dropped check dies in the suite, not only in `tsc` (review W3).
+    const badPatchDl = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, { dl: 'yes' });
+    expect(badPatchDl.status).toBe(400);
+    expect(await badPatchDl.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
+
     const empty = await request('PATCH', '/api/photos/ph-001', ADMIN_EV1, {});
     expect(empty.status).toBe(400);
     expect(await empty.json()).toEqual({ statusCode: 400, message: 'Bad Request' });
