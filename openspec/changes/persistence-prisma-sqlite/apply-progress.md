@@ -1566,3 +1566,198 @@ do not block.
 **Chain line-count metric (unified definition, resolves the prior 303-vs-309 ambiguity):**
 net added lines excluding blank and comment-only lines (`//`, `/*…*/`, `*`); per modified
 file = diff-added minus diff-removed under that filter; new files counted whole.
+
+---
+
+# PR-3a — Second-admin approval workflow (BR-05) (tasks 3a.1–3a.3)
+
+**Goal (tasks.md):** the `pending → approved|rejected` second-admin workflow is enforced
+server-side with no premature access. **Scope:** `POST /api/events/:id/admin-requests`,
+`PATCH /api/admin-requests/:id`, `GET /api/events/:id/admin-requests` plus the BR-05
+repository, parsers and authz seam. **Out of scope:** QR (3b), any client UI (none exists
+for admin requests), and the re-seed FK footgun (open item below). Continuation batch on
+HEAD `8e2529b`; nothing staged or committed — the orchestrator owns git. **No `prisma/**`
+change:** the `AdminRequest` model already ships from PR-1a, so no migration was needed
+and the high-risk schema item stayed closed.
+
+## Spec answers (req 4 / BR-05 — resolved from spec.md + design.md, not assumed)
+
+1. **Candidate model:** `POST { name }` creates a NEW `User(role: 'admin')` with **no**
+   `EventAssignment`, atomically with the pending `AdminRequest` (members.ts pattern;
+   server-generated `usr-`/`ar-` ids, explicit field construction). The design's
+   `AdminRequest` row carries **no candidate-name column**, so the user cannot be created
+   at approval time without a schema change — the name lives on the User row created at
+   request time. **Only the `EventAssignment` is created on approval**, in the same
+   transaction as the status flip: that row _is_ the grant, because access is purely
+   assignment-based (BR-03), so pending and rejected candidates hold zero scoped access.
+2. **Terminal states:** the conditional `updateMany({ id, status: 'pending' })` IS the
+   state machine — a decided request never transitions again (flip `rejected → approved`
+   → generic 400, spec req 4 scenario 3 "terminal"). Rejected records stay queryable via
+   GET; `User` rows are never deleted (schema guardrail).
+3. **PATCH contract (own decision — the spec is silent):** decisions are exactly
+   `approved | rejected`; `PATCH { status: 'pending' }` → 400 because the server-set
+   initial state is not a decision, and any string outside the three-state workflow set
+   → 400 (app-layer validated string, no DB enum).
+4. **Provider-only via a caller-role check BEFORE the row is read:**
+   `canDecideAdminRequest` in `authz.ts` — the event's admin (self-approval) and its
+   security staff get a byte-identical 403 and learn nothing about the row; only the
+   provider can distinguish an unknown row (404) from an already-decided one (400).
+
+## Honest TDD account
+
+- **3a.1 (RED): true RED→GREEN, captured in-session.** `admin-requests.int.spec.ts`
+  (8 tests) written first against the route-less tree → `npm run test:int -- admin-requests`
+  → **8 failed (8)**, every test failing on real 404s (`expected 404 to be 201`, and
+  `expected 404 to be 403` for the scope test) — no production code touched. Full output
+  saved at `/tmp/opencode/pr-3a/RED-3a.1.txt`.
+- **3a.2 (GREEN):** minimal implementation (repository + two parsers +
+  `canDecideAdminRequest` + three routes) → **8 passed (8)**; full suite **131 passed**
+  (123 baseline + 8). One `prettier --write` pass on the three formatted files after
+  GREEN; the suite re-ran **131/131** post-format.
+- **Documentation (this section + tasks.md boxes) was written in a follow-up turn, only
+  after the user explicitly approved the budget overage below** — the code/test/gate work
+  above was complete and green before any doc line was added.
+
+## Status
+
+| Task                      | Status | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3a.1 RED suite            | ✅     | `admin-requests.int.spec.ts` **8 tests** — all four req-4 scenarios (pending candidate: `role:'admin'`, 0 assignments, `GET /api/events` → `[]`, five event-addressed GETs + guest write/patch + event create → 403; approval → exactly `['ev-001']` scope incl. writes; rejection → 0 assignments, record queryable, flip → 400 terminal; self-approval → 403 + status stays `pending`) plus POST scope, mass-assignment immunity, generic-error contract and GET-scope guards. **RED 8 failed (8)** on real 404s → **GREEN 8 passed (8)**                                 |
+| 3a.2 endpoints            | ✅     | `POST /events/:id/admin-requests` (S8 `eventWriteScope`: assigned admin only — provider/security/foreign/anonymous rejected); `PATCH /admin-requests/:id` (provider-only caller-role check first; decisions `approved\|rejected` only, `pending` → 400; terminal via conditional `updateMany`; approval creates the `EventAssignment` in the same transaction); `GET /events/:id/admin-requests` (`eventAccess('content')`: provider any / assigned admin). States are strings validated by `parseAdminRequestPatch`. **Mutation 5/5 killed**, **159 unit / 131 int** green |
+| 3a.3 PR verification gate | ✅     | All 7 gates green with the counts below; budget overage (425 vs 400) **explicitly accepted by the user** — see the line-count section                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+## Spec coverage vs audit
+
+| Check                                                          | Result                                                                                                                                                                                                                      |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| req 4 scenario 1 (pending grants nothing through any API path) | ✅ candidate user exists with `role:'admin'` and **zero** assignments; list path returns `[]`, all five event-addressed GETs and both write paths answer byte-identical 403, guest counts unchanged                         |
+| req 4 scenario 2 (provider approval grants exactly event A)    | ✅ `EventAssignment` = `['ev-001']` only (DB-asserted); `GET /api/events` → `['ev-001']`; ev-001 read/write 200/201, ev-002 read/write 403/403 with zero rows created                                                       |
+| req 4 scenario 3 (rejection terminal but retained)             | ✅ rejected record queryable via GET with full fields; 0 assignments, no access, no writes; `rejected → approved` flip → generic 400, row unchanged                                                                         |
+| req 4 scenario 4 (admin cannot self-approve)                   | ✅ the event's admin (the requester) and its security both get byte-identical 403 from the caller-role check **before** the row is read; status stays `pending` (`decidedAt` null) in GET **and** in the DB row             |
+| req 1 (BR-01) separable caller context                         | ✅ role decision lives in `authz.ts` `canDecideAdminRequest` (pure function over `CallerContext`); routes only consume it — swapping the context source touches nothing here                                                |
+| design §5 endpoint matrix                                      | ✅ POST = assigned admin (scope + role), PATCH = provider only, GET = provider any / assigned admin — all through the existing guards, no third scope mechanism                                                             |
+| App-layer state validation (req 16 lineage)                    | ✅ states are plain strings; parser accepts exactly `pending\|approved\|rejected`, arbitrary strings → generic 400 (mutation M3 proves the test has teeth); POST ignores client `status` entirely (server forces `pending`) |
+| Mass-assignment immunity (S8)                                  | ✅ client `id`/`candidateUserId`/`requestedById`/`eventId`/`status`/`decidedAt` never read — ids server-generated, event from the URL, requester from the caller context                                                    |
+
+## Mutation-verification (5/5 mutants killed — FULL 131-test suite per mutant, not filtered)
+
+Each mutant: precise literal replacement → full `npm run test:int` → named tests RED →
+restore → `cmp` byte-identical against the pre-campaign backup.
+
+| #   | Mutant (one new guard weakened)                                      | Expected RED test killed                                             | Observed (failed / 131)                                                                                                                               | Restored |
+| --- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| M1  | PATCH `/admin-requests/:id` drops the `canDecideAdminRequest` wiring | admin self-approval must be refused; unknown-row probing must be 403 | **2 failed** — `rejects the event admin self-approval and keeps the request pending`, `answers invalid payloads and unknown rows with generic errors` | `cmp` OK |
+| M2  | `canDecideAdminRequest` returns `true` (caller-role block dropped)   | same pair — the role check IS the self-approval block                | **2 failed** — the same two tests                                                                                                                     | `cmp` OK |
+| M3  | `parseAdminRequestPatch` drops the state validation                  | an arbitrary status string must get the generic 400                  | **1 failed** — `answers invalid payloads and unknown rows with generic errors` (`{status:'banana'}` → 200)                                            | `cmp` OK |
+| M4  | approval skips the `EventAssignment` creation                        | the candidate must gain exactly event-A scope on approval            | **1 failed** — `grants exactly event-A scope when the provider approves the request`                                                                  | `cmp` OK |
+| M5  | POST `/events/:id/admin-requests` drops the `eventWriteScope` check  | request creation must be assigned-admin only                         | **1 failed** — `creates requests only from the assigned admin of the own event`                                                                       | `cmp` OK |
+
+Campaign script: `/tmp/opencode/pr-3a/mutation-campaign.sh` (backups
+`/tmp/opencode/pr-3a/mut-backups/`, per-mutant outputs `MUT-M*.txt`). Post-campaign all
+four mutated files `cmp` byte-identical to their backups and `git diff --numstat` matched
+the pre-campaign values — the tree left the campaign exactly as it entered it.
+
+## Review note — fresh-context adversarial review (APPROVE) + correction batch
+
+Review of the uncommitted tree at HEAD `8e2529b`: **APPROVE — 0 CRITICAL / BLOCKER,
+4 WARNING, 5 INFO**. All seven claims C1–C7 survived independent falsification; all four
+req-4 scenarios are covered. The reviewer re-measured every gate itself (not copied) and
+ran its own 10-mutant campaign: 8 killed, 2 survived. Both survivors were **unpinned
+behaviors, not defects** — they became this correction batch:
+
+| Finding      | Unpinned behavior                                                                                                            | New pin                                                                                                                                                                                               |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1 (WARNING) | `listAdminRequests` `where: { eventId }` — dropping it survived the suite because every test only ever created `ev-001` rows | `never leaks one event admin requests into another event list` — a request on `ev-002`, then each event's list (assigned admin **and** provider) must carry its own record and only its own           |
+| F2 (WARNING) | approval atomicity — moving `EventAssignment.create` outside the `$transaction` survived                                     | `rolls the approval back when the event assignment cannot be created` — deterministic `P2002` via the `(eventId,userId)` PK, then the **persisted** row must still be `pending` with `decidedAt` null |
+
+Teeth re-proven after the batch: M9 (`where: {}`) → F1 test RED; M8 (assignment after the
+commit) → F2 test RED (`expected 'approved' to be 'pending'`). Both mutants restored `cmp`
+byte-identical, production files unchanged (`repositories/admin-requests.ts` still
+`cdcb6525…`).
+
+Not fixed, recorded for later: **F3** no route resolves `candidateUserId` to a name, so a
+provider approval UI cannot identify the candidate — follow-up slice before any such UI;
+**F4** re-seed FK footgun, now **confirmed by reproduction** on a throwaway DB (not just
+declared) — PR-4 decision; **F5–F9** INFO (no FK on `candidateUserId`, `200 []` on an
+unknown event matching the pre-existing members route, arbitrary `orderBy id`, local type
+redeclaration in the spec, pending/rejected candidates keeping `role:'admin'`).
+
+## Verification gates (actual output)
+
+| Gate                                         | Result                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------ |
+| `npm run test:unit`                          | **11 files / 159 tests passed** (unchanged baseline)                     |
+| `npm run test:int`                           | **13 files / 133 tests passed** (123 baseline + 8 PR-3a + 2 review pins) |
+| `npx tsc -p tsconfig.app.json --noEmit`      | exit **0**                                                               |
+| `npx tsc -p tsconfig.spec.json --noEmit`     | exit **0**                                                               |
+| `npm run build`                              | exit **0** — prerender 1 route, no NG05xx                                |
+| `npx prettier --check .`                     | exit **0**, 0 unformatted files (re-run after this doc edit)             |
+| `node scripts/verify-parity.mjs --slice all` | **57/57 checks passed — all green**                                      |
+
+## Code-line count vs 400 budget (chain metric — USER-APPROVED overage)
+
+Counted with the **unified definition** at the end of this file (recount script:
+`/tmp/opencode/pr-3a/line-metric.mjs`):
+
+| Unit                                                  | Lines           |
+| ----------------------------------------------------- | --------------- |
+| `api/admin-requests.int.spec.ts` (new, whole file)    | 308             |
+| `data/repositories/admin-requests.ts` (new, whole)    | 75              |
+| `api/index.ts` (diff delta — 3 routes + imports)      | +54/−1 → **53** |
+| `api/write-validation.ts` (diff delta — parsers)      | **19**          |
+| `api/authz.ts` (diff delta — `canDecideAdminRequest`) | **3**           |
+| **Total**                                             | **458**         |
+
+**458 > 400 — 14.5% over budget.** Two approvals, in order: the user accepted **425**
+before the adversarial review, then explicitly ordered the two review-correction pins
+(`+33`, test-only) before the commit. Justification is unchanged: production code is
+only ≈ **150** code lines; the excess is test coverage (**308**) pinning all four req-4
+scenarios plus the scope / mass-assignment / error-contract / GET-scope guards and the
+two unpinned behaviors the review found. Per the chain rule (work-unit-commits: budget
+is not code-golf) **no tests, comments or blank lines were trimmed to fit** — the
+overage was measured, reported and approved instead; no split was taken.
+
+## Files touched (PR-3a, uncommitted)
+
+- **New (2):** `src/server/api/admin-requests.int.spec.ts` (10 tests),
+  `src/server/data/repositories/admin-requests.ts`
+- **Modified (3):** `src/server/api/index.ts` (+54/−1 — GET/POST/PATCH admin-requests +
+  imports), `src/server/api/write-validation.ts` (+19 — `parseAdminRequestInput` /
+  `parseAdminRequestPatch` + type import), `src/server/api/authz.ts` (+3 —
+  `canDecideAdminRequest`)
+- **Plus docs:** `openspec/.../tasks.md` (3a.1–3a.3 checked), this file
+- **Untouched:** `prisma/**` (no schema change — `AdminRequest` already existed),
+  `prisma/seed.ts`, `src/app/**`, every prior-batch file, all client feature/UI code.
+  **No DELETE route added** — `grep '\.delete(' src/server/api/index.ts` → 0 matches
+
+## Pre-existing pin warning (owner: PR-4 — do NOT touch it in this batch)
+
+The structural `registeredDeleteRoutes() === []` pin in `toggles.int.spec.ts` (2a-ii-b)
+stays GREEN here precisely because PR-3a adds **no** DELETE route (grep-verified above).
+**It must be updated when the provider-only `DELETE /api/events/:id` (BR-12) lands in
+PR-4**: once that route exists, `registeredDeleteRoutes()` is no longer `[]` and the pin
+will fail by design — its intent (admins can never delete through any path) must then be
+re-scoped to assert the admin DELETE attempt is rejected while the provider purge route
+exists. This batch deliberately did not weaken or preempt it.
+
+## Open item — re-seed FK footgun (owner note says PR-3a; NOT covered by tasks 3a.1–3a.3)
+
+The §PR-1b handoff note assigns PR-3a a resolution for: `prisma/seed.ts` deletes only the
+13 deterministic seed user ids, while `AdminRequest.requestedBy` is `onDelete: Restrict`.
+This batch is the first to **create** `AdminRequest` rows that reference seed users
+(e.g. `usr-002`) — so re-running `npm run db:seed` against a dev DB that already holds a
+non-seed `AdminRequest` will fail on that FK (integration tests are unaffected: the
+harness `resetDatabase()` truncates `adminRequest` before `user`). **Untouched here**
+because tasks 3a.1–3a.3 do not cover it and the fix choices (guard/refuse re-seeding,
+upserts, or transactionally deleting dependent rows first) must not silently weaken
+`onDelete: Restrict`. **Needs an orchestrator decision** — natural home: PR-4 (the
+retention/seed-decoupling batch).
+
+## Known design consequence (documented, not fixed)
+
+Pending and rejected candidates persist as `role: 'admin'` users with **no** assignment
+(`User` rows are never deleted — schema guardrail). They hold zero scoped access because
+authorization is assignment-based, but the provider could later assign them to any event
+through event creation (`existingAdminIds` accepts any admin-role user). This follows
+from req 4 pinning _access_, not row existence; recorded as a demo-scope consequence of
+the never-delete-users rule, not a spec violation.

@@ -522,17 +522,31 @@ access. **Out of scope:** QR (3b). **Dependencies:** PR-2a (authz + members).
 
 Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 📍 3a → 3b → 4`
 
-- [ ] **3a.1** **Test-first (RED):** write `src/server/api/admin-requests.int.spec.ts` —
+- [x] **3a.1** **Test-first (RED):** write `src/server/api/admin-requests.int.spec.ts` —
       (a) `pending` candidate has **no** access to event A via any API path; (b) provider
       sets `approved` → candidate gains exactly event-A scope; (c) `rejected` grants nothing
       and the record remains queryable; (d) the event's admin attempting self-approval is
-      rejected and status stays `pending`. _Traces: BR-05 → spec req 4 (all 4 scenarios)._
-- [ ] **3a.2** Implement `POST /api/events/:id/admin-requests` (assigned admin, scope + role),
+      rejected and status stays `pending`. _Traces: BR-05 → spec req 4 (all 4 scenarios)._ —
+      **RED 8 failed (8)** captured against the route-less tree (every test on real 404s;
+      `/tmp/opencode/pr-3a/RED-3a.1.txt`), then **GREEN 8 passed (8)** after 3a.2's minimal
+      implementation; all 4 req-4 scenarios + 4 guard tests.
+- [x] **3a.2** Implement `POST /api/events/:id/admin-requests` (assigned admin, scope + role),
       `PATCH /api/admin-requests/:id` (provider only; admin self-approve rejected by
       caller-role check), `GET /api/events/:id/admin-requests` (provider any / assigned
       admin). States are exactly `pending|approved|rejected` — string, app-layer validated.
-      🚧 after 3a.1. _Traces: BR-05, BR-01 → spec req 4, req 1._
-- [ ] **3a.3** Run the PR verification gate (ground rule 2).
+      🚧 after 3a.1. _Traces: BR-05, BR-01 → spec req 4, req 1._ — shipped per design §5:
+      POST rides the S8 `eventWriteScope`; PATCH runs `canDecideAdminRequest` (authz, pure
+      caller-role check) **before** the row is read, accepts decisions `approved|rejected`
+      only (`pending` → 400, decided rows terminal via conditional `updateMany`), and
+      approval creates the candidate's `EventAssignment` in the same transaction (user +
+      request created atomically at POST — no schema change needed); GET uses
+      `eventAccess('content')`. **Mutation 5/5 killed** (full 131-test suite per mutant,
+      restore `cmp` OK). **159 unit / 131 int** green.
+- [x] **3a.3** Run the PR verification gate (ground rule 2). — all 7 gates green:
+      **159 unit / 131 int / tsc app 0 / tsc spec 0 / build 0 / prettier
+      `--check .` 0 / parity 57–57** (tables in apply-progress §PR-3a). Budget note: the
+      unified metric totals **425 code lines vs 400** — the 6% overage (test-heavy:
+      production ≈150) was **explicitly accepted by the user**; no tests were trimmed.
 
 **Suggested work-unit commits:**
 

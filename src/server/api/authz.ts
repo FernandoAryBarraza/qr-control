@@ -47,6 +47,15 @@ export function canWriteEvent(
 }
 
 /**
+ * BR-05 / design §5: only the provider decides admin requests (approve/reject).
+ * The caller-role check is what refuses the event's own admin self-approval —
+ * the requester's identity never enters the decision (spec req 4, scenario 4).
+ */
+export function canDecideAdminRequest(caller: CallerContext): boolean {
+  return caller.role === 'provider';
+}
+
+/**
  * S8: the ONE object-scope decision shared by every write route (event-addressed
  * and row-addressed). `eventId` is the object's owning event; `null` means the
  * object does not exist and is denied for every caller — a nonexistent object

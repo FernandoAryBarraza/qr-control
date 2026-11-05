@@ -1,4 +1,8 @@
 import type { GuestStatus, PhotoState } from '../../app/core/models';
+import type {
+  AdminRequestStatus,
+  AdminRequestWriteInput,
+} from '../data/repositories/admin-requests';
 import type { EventWriteInput } from '../data/repositories/events';
 import type { GuestPatchInput, GuestWriteInput } from '../data/repositories/guests';
 import type { MemberWriteInput } from '../data/repositories/members';
@@ -268,4 +272,37 @@ export function parseMemberInput(body: unknown): ParseResult<MemberWriteInput> {
   if (name === null || body['role'] !== 'security') return FAIL;
 
   return { ok: true, value: { name } };
+}
+
+const ADMIN_REQUEST_STATUSES: readonly string[] = ['pending', 'approved', 'rejected'];
+
+/**
+ * POST /api/events/:id/admin-requests (spec req 4 / BR-05): the payload only
+ * carries the candidate's name. Ids, the owning event, the requester and the
+ * status are server-set — client-supplied values are never read (S8).
+ */
+export function parseAdminRequestInput(body: unknown): ParseResult<AdminRequestWriteInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const name = text(body['name']);
+  if (name === null) return FAIL;
+
+  return { ok: true, value: { name } };
+}
+
+/**
+ * PATCH /api/admin-requests/:id: spec req 4 — the workflow states are exactly
+ * pending|approved|rejected, validated at the app layer (string column, no DB
+ * enum). The route additionally rejects `pending` (the server-set initial
+ * state is not a decision) and enforces the pending-only transition.
+ */
+export function parseAdminRequestPatch(
+  body: unknown,
+): ParseResult<{ readonly status: AdminRequestStatus }> {
+  if (!isRecord(body)) return FAIL;
+
+  const status = body['status'];
+  if (typeof status !== 'string' || !ADMIN_REQUEST_STATUSES.includes(status)) return FAIL;
+
+  return { ok: true, value: { status: status as AdminRequestStatus } };
 }

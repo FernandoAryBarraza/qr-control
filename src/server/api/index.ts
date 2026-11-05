@@ -2,6 +2,12 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { DATA_PROVIDER } from '../data/config';
 import { getPrisma } from '../data/prisma-client';
 import {
+  createAdminRequest,
+  decideAdminRequest,
+  findAdminRequest,
+  listAdminRequests,
+} from '../data/repositories/admin-requests';
+import {
   assignedEventIds,
   createEvent,
   existingAdminIds,
@@ -11,9 +17,17 @@ import {
 import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repositories/guests';
 import { createSecurityMember, listMembers } from '../data/repositories/members';
 import { createPhoto, listPhotos, photoEventId, updatePhoto } from '../data/repositories/photos';
-import { canCreateEvent, canReadEvent, canWriteObject, resolveEventScope } from './authz';
+import {
+  canCreateEvent,
+  canDecideAdminRequest,
+  canReadEvent,
+  canWriteObject,
+  resolveEventScope,
+} from './authz';
 import { callerContext, callerOf } from './caller-context';
 import {
+  parseAdminRequestInput,
+  parseAdminRequestPatch,
   parseEventInput,
   parseGuestInput,
   parseGuestPatch,
@@ -201,4 +215,57 @@ apiRouter.post('/events/:id/members', callerContext, eventWriteScope, async (req
     return;
   }
   res.status(201).json(await createSecurityMember(pathId(req), parsed.value));
+});
+
+// GET /api/events/:id/admin-requests — provider any; assigned admin (design §5
+// matrix, same read guard as members). BR-05's workflow record stays queryable
+// for the parties that manage it (spec req 4, scenario 3).
+apiRouter.get(
+  '/events/:id/admin-requests',
+  callerContext,
+  eventAccess('content'),
+  async (req, res) => {
+    res.json(await listAdminRequests(pathId(req)));
+  },
+);
+
+// POST /api/events/:id/admin-requests — assigned admin only, scope + role via
+// the S8 guard (design §5 / BR-05): creates the candidate as an unassigned
+// admin user with a pending request; pending grants no scoped access until the
+// provider approves (spec req 4, scenario 1).
+apiRouter.post('/events/:id/admin-requests', callerContext, eventWriteScope, async (req, res) => {
+  const parsed = parseAdminRequestInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  const caller = callerOf(res);
+  res.status(201).json(await createAdminRequest(pathId(req), caller.userId, parsed.value));
+});
+
+// PATCH /api/admin-requests/:id — provider only (design §5): the caller-role
+// check refuses the event's admin self-approval BEFORE the row is read (spec
+// req 4, scenario 4 — no row probing), `pending` is not a decision, and a
+// decided request is terminal (scenario 3: rejection/approval never flips).
+apiRouter.patch('/admin-requests/:id', callerContext, async (req, res) => {
+  const caller = callerOf(res);
+  if (!canDecideAdminRequest(caller)) {
+    forbidden(res);
+    return;
+  }
+  const parsed = parseAdminRequestPatch(req.body);
+  if (!parsed.ok || parsed.value.status === 'pending') {
+    badRequest(res);
+    return;
+  }
+  const decided = await decideAdminRequest(pathId(req), parsed.value.status);
+  if (decided === null) {
+    if ((await findAdminRequest(pathId(req))) === null) {
+      res.status(404).json({ statusCode: 404, message: 'Not Found' });
+      return;
+    }
+    badRequest(res); // already decided — terminal (spec req 4, scenario 3)
+    return;
+  }
+  res.json(decided);
 });
