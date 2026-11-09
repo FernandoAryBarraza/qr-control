@@ -28,3 +28,14 @@ export function getDatabaseUrl(): string {
 // provider marker. PR-4's `npm run db:verify` guards drift between this constant and
 // the schema, and the seed (PR-1b) stamps the same provider into SystemSetting (BR-18).
 export const DATA_PROVIDER = 'sqlite';
+
+// Design §6: QR payloads embed the absolute verify URL, so the base URL is runtime
+// configuration. The default matches `.env.example` and keeps the integration
+// harness hermetic (it only overrides DATABASE_URL).
+const DEFAULT_WEB_BASE_URL = 'http://localhost:4200';
+
+export function getWebBaseUrl(): string {
+  loadLocalEnv();
+  const url = process.env['WEB_BASE_URL'];
+  return url === undefined || url === '' ? DEFAULT_WEB_BASE_URL : url;
+}

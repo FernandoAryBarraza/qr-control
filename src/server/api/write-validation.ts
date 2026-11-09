@@ -7,6 +7,7 @@ import type { EventWriteInput } from '../data/repositories/events';
 import type { GuestPatchInput, GuestWriteInput } from '../data/repositories/guests';
 import type { MemberWriteInput } from '../data/repositories/members';
 import type { PhotoPatchInput, PhotoWriteInput } from '../data/repositories/photos';
+import type { QrIssueInput, QrKind } from '../data/repositories/qr';
 
 // App-layer payload validation (spec req 16, scenario 3): statuses stay strings in
 // SQLite, so write contracts are parsed here before Prisma sees them. The parsers
@@ -305,4 +306,33 @@ export function parseAdminRequestPatch(
   if (typeof status !== 'string' || !ADMIN_REQUEST_STATUSES.includes(status)) return FAIL;
 
   return { ok: true, value: { status: status as AdminRequestStatus } };
+}
+
+const QR_KINDS: readonly QrKind[] = ['guest', 'companion', 'emergency'];
+
+/** Spec req 6/9: the issuance kinds are exactly guest | companion | emergency. */
+export function isQrKind(value: unknown): value is QrKind {
+  return typeof value === 'string' && QR_KINDS.some((kind) => kind === value);
+}
+
+/**
+ * POST /api/events/:id/qr (spec req 6/9/10): the payload names the kind and, for
+ * attendee QRs, the target row. The token, its hash, the record id and the owning
+ * event are server-set — client-supplied values are never read (S8). A companion
+ * QR needs no parent id: the server resolves it from the companion's guest (BR-07).
+ */
+export function parseQrIssueInput(body: unknown): ParseResult<QrIssueInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const kind = body['kind'];
+  if (!isQrKind(kind)) return FAIL;
+  if (kind === 'emergency') return { ok: true, value: { kind } };
+
+  if (kind === 'guest') {
+    const guestId = text(body['guestId']);
+    return guestId === null ? FAIL : { ok: true, value: { kind, guestId } };
+  }
+
+  const companionId = text(body['companionId']);
+  return companionId === null ? FAIL : { ok: true, value: { kind, companionId } };
 }

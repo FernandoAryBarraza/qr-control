@@ -17,6 +17,7 @@ import {
 import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repositories/guests';
 import { createSecurityMember, listMembers } from '../data/repositories/members';
 import { createPhoto, listPhotos, photoEventId, updatePhoto } from '../data/repositories/photos';
+import { issueQr } from '../data/repositories/qr';
 import {
   canCreateEvent,
   canDecideAdminRequest,
@@ -34,6 +35,7 @@ import {
   parseMemberInput,
   parsePhotoInput,
   parsePhotoPatch,
+  parseQrIssueInput,
 } from './write-validation';
 
 export const apiRouter = Router();
@@ -268,4 +270,30 @@ apiRouter.patch('/admin-requests/:id', callerContext, async (req, res) => {
     return;
   }
   res.json(decided);
+});
+
+// POST /api/events/:id/qr — assigned admin only, event scope (design §5 / BR-07):
+// issues ONE attendee QR per call — a guest, a companion linked to the parent guest
+// QR, or a standalone emergency QR for the own event (BR-10). The raw token is
+// returned exactly once (never cached) and only its SHA-256 is stored (req 10 /
+// BR-11, BR-17). A missing or foreign attendee gets the same 403-equivalent
+// rejection as every object-scoped route (spec req 3, scenario 3); an already
+// issued attendee or a missing parent QR is a 400 state conflict.
+apiRouter.post('/events/:id/qr', callerContext, eventWriteScope, async (req, res) => {
+  const parsed = parseQrIssueInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  const outcome = await issueQr(pathId(req), parsed.value);
+  if (!outcome.ok) {
+    if (outcome.reason === 'forbidden') {
+      forbidden(res);
+      return;
+    }
+    badRequest(res);
+    return;
+  }
+  res.set('Cache-Control', 'no-store');
+  res.status(201).json(outcome.issued);
 });

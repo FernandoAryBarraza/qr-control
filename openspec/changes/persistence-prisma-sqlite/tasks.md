@@ -566,21 +566,36 @@ without affecting guests/photos.
 
 Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 📍 3b → 4`
 
-- [ ] **3b.1** **Sub-split guard:** project code lines before tests; if tracking >400, split
+- [x] **3b.1** **Sub-split guard:** project code lines before tests; if tracking >400, split
       into **3b-i** (issuance + check-in writes) and **3b-ii** (verify + image read path).
-      ⚠️ `size:exception` is the fallback if the split proves infeasible.
-- [ ] **3b.2** Install server-only `qrcode` dep (pure JS + pngjs, verify MIT license at
-      install; do **not** touch the existing client `qrcode-generator` — design §6).
-- [ ] **3b.3** **Test-first (RED):** write `src/server/api/qr-issuance.int.spec.ts` — a
+      ⚠️ `size:exception` is the fallback if the split proves infeasible. — **Split into
+      three slices (user-approved):** **S1 = 3b.2+3b.3+3b.4** (issuance), **S2 = 3b.5+3b.6**
+      (check-in), **S3 = 3b.7+3b.8** (verify + PNG). S1 shipped at **405 unified lines**
+      (raw 553 incl. blanks/comments) vs the 400 guide — the 1.25% overage was explicitly
+      accepted by the user.
+- [x] **3b.2** Install server-only `qrcode` dep (pure JS + pngjs, verify MIT license at
+      install; do **not** touch the existing client `qrcode-generator` — design §6). —
+      `qrcode@1.5.4` (MIT) + `@types/qrcode@1.5.6` (dev); transitive `pngjs@5.0.0` and
+      `dijkstrajs@1.0.3` both MIT. Client `qrcode-generator` untouched.
+- [x] **3b.3** **Test-first (RED):** write `src/server/api/qr-issuance.int.spec.ts` — a
       confirmed guest with N companions yields **N+1 distinct QR records**, each companion QR
       carrying `parentQrId` to the parent guest's QR; token = `crypto.randomBytes(32)
 .toString('base64url')` stored only as SHA-256 `tokenHash`, raw returned once; scanning
       issued tokens for known PII values finds no PII substring; client-supplied token content
       is ignored/rejected. _Traces: BR-07 → spec req 6 (scenario 1); BR-11/BR-17 → spec req
-      10 (scenarios 1, 3)._
-- [ ] **3b.4** Implement `POST /api/events/:id/qr` (assigned admin, event scope; `kind`:
+      10 (scenarios 1, 3)._ — **RED 8 failed (8)** (`/tmp/opencode/pr-3b/RED-3b.3.txt`) →
+      **GREEN 8 passed (8)**. Eight tests: distinct N+1 + parent link, SHA-256-only storage
+      and no re-expose, PII-free/ignored client token content, parent-QR-first rule,
+      assigned-admin-only scope, cross-event object scope, emergency QR (req 9 both
+      scenarios — landed here instead of 3b.7), payload validation.
+- [x] **3b.4** Implement `POST /api/events/:id/qr` (assigned admin, event scope; `kind`:
       guest|companion|emergency) returning `{ token, verifyUrl }` with absolute
-      `<WEB_BASE_URL>/verify/<rawToken>` URL. 🚧 after 3b.3.
+      `<WEB_BASE_URL>/verify/<rawToken>` URL. 🚧 after 3b.3. — `eventWriteScope` + the
+      design §5 matrix; missing/foreign target → generic **403** (spec req 3 scenario 3,
+      same as `requireObjectScope`), already-issued / missing parent QR → **400** state
+      conflict; `QrIssueInput` is a discriminated union so `emergency` cannot carry attendee
+      ids; `Cache-Control: no-store`. **Mutation 11/11 killed** (one by the type system).
+      `WEB_BASE_URL` added to `src/server/data/config.ts` with a documented default.
 - [ ] **3b.5** **Test-first (RED):** write `src/server/api/check-in.int.spec.ts` — first scan
       succeeds and consumes; second scan of the same token rejected "already used" with **no
       second CheckIn record**; scan before `event.end` succeeds; scan at/after `event.end`
