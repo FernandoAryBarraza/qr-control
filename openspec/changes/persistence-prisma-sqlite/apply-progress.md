@@ -1761,3 +1761,71 @@ authorization is assignment-based, but the provider could later assign them to a
 through event creation (`existingAdminIds` accepts any admin-role user). This follows
 from req 4 pinning _access_, not row existence; recorded as a demo-scope consequence of
 the never-delete-users rule, not a spec violation.
+
+---
+
+# PR-3b — slice 1: per-attendee QR issuance (tasks 3b.1–3b.4)
+
+**Goal (tasks.md):** every guest and companion gets its OWN opaque QR, linked to the
+parent guest QR, plus standalone emergency QRs. **Scope:** `POST /api/events/:id/qr`,
+`src/server/data/repositories/qr.ts`, the `parseQrIssueInput` parser, and `WEB_BASE_URL`
+in `src/server/data/config.ts`. **Out of scope (later slices):** check-in (3b.5–3b.6),
+verify/PNG (3b.7–3b.8), retention/purge (PR-4). **No `prisma/**` change:** `QrToken` and
+`CheckIn` already ship from PR-1a, so no migration was needed.
+
+The split agreed with the user is three slices: **S1 = 3b.2+3b.3+3b.4** (issuance, this
+batch), **S2 = 3b.5+3b.6** (single-use check-in + expiry), **S3 = 3b.7+3b.8** (verify +
+PNG). The fallback 3b-i/3b-ii split in tasks.md was not needed.
+
+## Decisions (spec silent or ambiguous — resolved here)
+
+1. **Companion QR requires an existing parent guest QR** (BR-07). The raw token is returned
+   exactly once and only its hash is stored, so a parent guest QR minted implicitly inside
+   a companion request would have an unreachable token. The companion request therefore
+   fails with 400 (state conflict) until the guest QR exists; the companion row's
+   `parentQrId` points at that guest row. Pinned by
+   `refuses a companion QR until the parent guest QR exists`.
+2. **Denial contract follows req 3 scenario 3, not a blanket 400.** A missing or foreign
+   guest/companion is an object-level denial → generic **403** (`{statusCode:403}`),
+   byte-identical for missing and foreign rows (anti-probing preserved) and consistent
+   with `requireObjectScope`. A row the caller may already see but cannot re-issue
+   (already issued, missing parent QR) is a **400** state conflict. The earlier draft
+   returned 400 for both; the adversarial review flagged the deviation (F4) and the route
+   now maps repository `forbidden` → 403, `invalid` → 400.
+3. **`QrIssueInput` is a discriminated union**: `{kind:'guest', guestId}` |
+   `{kind:'companion', companionId}` | `{kind:'emergency'}`. An emergency QR cannot even
+   carry an attendee id, so "emergency ignores client attendee fields" is a type
+   guarantee — the corresponding mutant fails `tsc` instead of needing a test.
+4. **Mass assignment (S8):** the record is built field by field; client-supplied `id`,
+   `token`, `tokenHash`, `eventId` and stray ids are never read (pinned by the PII test).
+5. **`WEB_BASE_URL`** lives in `src/server/data/config.ts` with a documented default
+   (`http://localhost:4200`, matching `.env.example`, which already shipped the key). The
+   integration harness only overrides `DATABASE_URL`, so the default keeps it hermetic.
+6. **One QR per target:** re-issuing a guest or companion QR is a 400 and never creates a
+   second row — the first raw token cannot be recovered, so a second row would be useless.
+
+## Verification evidence
+
+- **RED → GREEN:** `qr-issuance.int.spec.ts` 8 tests; RED captured on the route-less tree
+  (`/tmp/opencode/pr-3b/RED-3b.3.txt`, 8 failed) → GREEN 8 passed.
+- **Mutation campaign (independent, 11 mutants):** guest scope, companion scope,
+  403→400 contract, raw-token storage, guest re-issue, parent link, route scope guard,
+  kind whitelist, parent requirement, missing-target status, emergency target inheritance
+  → **11/11 killed** (the last by `tsc`, not a test). Tree restored byte-exactly (`cmp`).
+- **Adversarial review (fresh context):** first pass **BLOCK** — three surviving mutants
+  (F1 companion cross-event untested, F2 kind whitelist untested with a valid companion id,
+  F3 companion re-issue untested) plus F4 (object denials should be 403). All four fixed;
+  bounded recheck: **RESOLVED**, the three mutants now die.
+- **Gates:** 159 unit / **141 int (14 files)** / tsc app 0 / tsc spec 0 / build 0 /
+  prettier 0 / parity 57–57.
+- **Budget:** **405 unified lines** (net added excluding blanks/comment-only; raw 553) vs
+  the 400 guide — +1.25%, explicitly accepted by the user.
+
+## Deviations and follow-ups
+
+- The req-9 emergency issuance test lives in `qr-issuance.int.spec.ts` (3b.3) rather than
+  in the 3b.7 verify spec: issuance is the behavior under test, and 3b.8's wording already
+  allowed it ("if not already covered by 3b.4").
+- No new follow-ups. Pre-existing open items (re-seed FK footgun → PR-4; `candidateUserId`
+  name resolution; F1 citation drift; photos TDD exception; `scope.int.spec.ts:341` regex;
+  PR-2b suggestions S1–S4) are unchanged and out of this slice.
