@@ -3,6 +3,7 @@ import type {
   AdminRequestStatus,
   AdminRequestWriteInput,
 } from '../data/repositories/admin-requests';
+import type { CheckInWriteInput } from '../data/repositories/check-ins';
 import type { EventWriteInput } from '../data/repositories/events';
 import type { GuestPatchInput, GuestWriteInput } from '../data/repositories/guests';
 import type { MemberWriteInput } from '../data/repositories/members';
@@ -335,4 +336,17 @@ export function parseQrIssueInput(body: unknown): ParseResult<QrIssueInput> {
 
   const companionId = text(body['companionId']);
   return companionId === null ? FAIL : { ok: true, value: { kind, companionId } };
+}
+
+/**
+ * POST /api/check-ins (spec req 7/8): the body carries ONLY the raw QR token. The
+ * scan record (id, event, qr, timestamp) is server-set from the token lookup, so
+ * client-supplied fields are never read (S8). The write contract itself lives in
+ * the repository layer (like every other write contract) and is imported above.
+ */
+export function parseCheckInInput(body: unknown): ParseResult<CheckInWriteInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const token = text(body['token']);
+  return token === null ? FAIL : { ok: true, value: { token } };
 }
