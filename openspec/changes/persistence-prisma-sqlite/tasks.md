@@ -596,15 +596,37 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 📍 3b �
       conflict; `QrIssueInput` is a discriminated union so `emergency` cannot carry attendee
       ids; `Cache-Control: no-store`. **Mutation 11/11 killed** (one by the type system).
       `WEB_BASE_URL` added to `src/server/data/config.ts` with a documented default.
-- [ ] **3b.5** **Test-first (RED):** write `src/server/api/check-in.int.spec.ts` — first scan
+- [x] **3b.5** **Test-first (RED):** write `src/server/api/check-in.int.spec.ts` — first scan
       succeeds and consumes; second scan of the same token rejected "already used" with **no
       second CheckIn record**; scan before `event.end` succeeds; scan at/after `event.end`
       rejected as expired with no record; **emergency QR after end also rejected**; caller not
       assigned to the token's event rejected. _Traces: BR-08 → spec req 7; BR-09 → spec req 8
-      (all 3 scenarios); BR-03 scope._
-- [ ] **3b.6** Implement `POST /api/check-ins` as one `prisma.$transaction` (conditional
+      (all 3 scenarios); BR-03 scope._ — **18 integration tests** (11 base + 7 added by the
+      review-fix batch). Base suite: first scan consumes, reuse → 409 with no second record,
+      expired → 410 leaving the QR unconsumed, emergency expiry, companion as its own
+      single-use record, cross-event → 403, provider/anonymous → 403/401, provider with a
+      stray assignment → 403, unknown token + malformed payload → 403/400, mass assignment
+      ignored, two concurrent scans → exactly one check-in. Fix batch: **exact `event.end`
+      boundary** (frozen clock — kills the `<=`→`<` mutant), **rollback when the record
+      cannot be written** (fault injected through the `@unique` on `CheckIn.qrId` — kills the
+      "no `$transaction`" mutant), **reuse precedence** (a consumed token whose event ended
+      is 409, not 410), **companion expiry**, **scope before state** (unassigned → 403 for a
+      consumed and for an expired token), **reuse across scanner roles**, and
+      **`Cache-Control: no-store`**.
+- [x] **3b.6** Implement `POST /api/check-ins` as one `prisma.$transaction` (conditional
       `consumedAt: null → now()` update + `CheckIn` create with `@unique qrId`; expiry vs
-      `event.end` for all kinds; caller event-scope check). 🚧 after 3b.5.
+      `event.end` for all kinds; caller event-scope check). 🚧 after 3b.5. — `checkInScope`
+      guard (token → event → assignment) + `canCheckIn` (role half AND assignment half);
+      repository `checkInByToken` owns the atomic claim; **reuse precedes expiry** (spec req 7
+      scenario 2 is unscoped in time, req 8's expiry scenario is scoped to a valid UNCONSUMED
+      QR) while the conditional update stays the single-use authority for a live event.
+      **Mutation campaign:** round 1 (pre-correction tree) 15 mutants → 13 killed, 2 survived
+      (the `event.end` boundary and the missing `$transaction` rollback — both now pinned by
+      the new tests); round 2 (corrected tree) 19 mutants → 18 killed, 1 survived (the
+      repository's defensive `qr === null` branch: it IS reachable in the window between the
+      guard's token read and the repository's own pre-read, and load-bearing there — without
+      it a mid-request deletion answers 500 instead of the generic 403 — but no test can
+      orchestrate that window, so it is documented rather than pinned).
 - [ ] **3b.7** **Test-first (RED):** write `src/server/api/qr-verify.int.spec.ts` — verify
       endpoint resolves a companion token to the specific companion **and its parent guest**;
       resolves guest/emergency tokens; issued-raw-token PNG endpoint returns `image/png`

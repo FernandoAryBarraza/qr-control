@@ -18,7 +18,9 @@ import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repo
 import { createSecurityMember, listMembers } from '../data/repositories/members';
 import { createPhoto, listPhotos, photoEventId, updatePhoto } from '../data/repositories/photos';
 import { issueQr } from '../data/repositories/qr';
+import { checkInByToken, qrEventIdByToken } from '../data/repositories/check-ins';
 import {
+  canCheckIn,
   canCreateEvent,
   canDecideAdminRequest,
   canReadEvent,
@@ -29,6 +31,7 @@ import { callerContext, callerOf } from './caller-context';
 import {
   parseAdminRequestInput,
   parseAdminRequestPatch,
+  parseCheckInInput,
   parseEventInput,
   parseGuestInput,
   parseGuestPatch,
@@ -105,6 +108,27 @@ const eventWriteScope = requireObjectScope(async (req) => pathId(req));
 // client-supplied one (spec req 3, scenario 3).
 const guestRowWriteScope = requireObjectScope(async (req) => guestEventId(pathId(req)));
 const photoRowWriteScope = requireObjectScope(async (req) => photoEventId(pathId(req)));
+
+// POST /api/check-ins — the token in the BODY resolves the owning event, so this
+// guard cannot be event-addressed: parse first (malformed -> 400), look the token
+// up, then authorize the assigned admin/security of that event (design §5). An
+// unknown token and a foreign-event token get the same byte-identical 403, so a
+// token can never be probed (spec req 3).
+const checkInScope = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const parsed = parseCheckInInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  const caller = callerOf(res);
+  const eventId = await qrEventIdByToken(parsed.value.token);
+  const assigned = await assignedEventIds(caller.userId);
+  if (!canCheckIn(caller, eventId, assigned)) {
+    forbidden(res);
+    return;
+  }
+  next();
+};
 
 // GET /api/events — provider: all; admin/security: assigned only (BR-03).
 apiRouter.get('/events', callerContext, async (req, res) => {
@@ -296,4 +320,36 @@ apiRouter.post('/events/:id/qr', callerContext, eventWriteScope, async (req, res
   }
   res.set('Cache-Control', 'no-store');
   res.status(201).json(outcome.issued);
+});
+
+// POST /api/check-ins — single-use scan (spec req 7 / BR-08) with expiry at the
+// owning event's end (req 8 / BR-09). The guard already proved the caller is the
+// event's assigned admin or security. A reused token is a 409, an expired one a
+// 410 (both after scope, so they leak nothing to an unassigned caller), and the
+// check-in record is built from the token lookup, never from the body (S8).
+apiRouter.post('/check-ins', callerContext, checkInScope, async (req, res) => {
+  const parsed = parseCheckInInput(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  const outcome = await checkInByToken(parsed.value.token);
+  if (!outcome.ok) {
+    if (outcome.reason === 'already_used') {
+      res.status(409).json({ statusCode: 409, message: 'Conflict' });
+      return;
+    }
+    if (outcome.reason === 'expired') {
+      res.status(410).json({ statusCode: 410, message: 'Gone' });
+      return;
+    }
+    // The token was not found at all: same generic denial as the guard, never a
+    // distinct status. (A token that vanishes AFTER the repository's own read is
+    // reported as already-used — the claim cannot tell a deleted row from a
+    // consumed one, and neither records a check-in.)
+    forbidden(res);
+    return;
+  }
+  res.set('Cache-Control', 'no-store');
+  res.status(201).json(outcome.value);
 });

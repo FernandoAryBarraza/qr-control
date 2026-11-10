@@ -1829,3 +1829,129 @@ PNG). The fallback 3b-i/3b-ii split in tasks.md was not needed.
 - No new follow-ups. Pre-existing open items (re-seed FK footgun → PR-4; `candidateUserId`
   name resolution; F1 citation drift; photos TDD exception; `scope.int.spec.ts:341` regex;
   PR-2b suggestions S1–S4) are unchanged and out of this slice.
+
+---
+
+# PR-3b — slice 2: single-use QR check-in + expiry (tasks 3b.5–3b.6)
+
+**Goal (tasks.md):** the first scan of a QR records a check-in and consumes the token; every
+later scan is rejected; every kind (guest, companion, emergency) expires at the owning
+event's `end`. **Scope:** `POST /api/check-ins`, `src/server/data/repositories/check-ins.ts`,
+`parseCheckInInput`, the `canCheckIn` authz guard and the `checkInScope` route guard.
+**Out of scope (later slices):** verify/PNG (3b.7–3b.8), retention/purge (PR-4).
+**No `prisma/**` change:** `QrToken` and `CheckIn` already ship from PR-1a.
+
+## Decisions (spec silent or ambiguous — resolved here)
+
+1. **Reuse precedes expiry.** Spec req 7's "Reuse is rejected" scenario is unscoped in time
+   ("ANY subsequent scan of a consumed token"), while req 8's expiry scenario is scoped to a
+   "valid UNCONSUMED QR" — both hold only if the consumed check comes first. A consumed token
+   whose event has ended is therefore **409 already-used**, never 410 expired. Both blind
+   judges flagged the opposite order as a spec deviation; fixed in the review batch.
+2. **The conditional update stays the single-use authority.** The pre-read carries
+   `consumedAt` but consults it ONLY in the expiry branch; for a live event the decision is
+   the `updateMany({ id, consumedAt: null })` claim. A read-then-write shortcut would let a
+   stale read decide reuse — and it silently disarmed the guard: an earlier iteration of this
+   batch added a `consumedAt` fast path, and the claim-condition mutants (M3/M4) survived
+   until that fast path was removed.
+3. **The door role is admin or security, never the provider.** Two independent halves — the
+   ROLE half and the ASSIGNMENT half (design §5). The provider is excluded by the role half
+   even if a stray `EventAssignment` row exists, which has its own test.
+4. **409 / 410 for the two state conflicts.** Already-used and expired are different door
+   outcomes, while every other state conflict in the API answers the generic 400. The bodies
+   stay generic (no token material). Deliberate divergence, documented for the client wiring.
+5. **The write contract lives in the repository.** `CheckInWriteInput` sits next to
+   `CheckInRecord`/`CheckInOutcome` and the parser imports it as a type — like every sibling
+   write contract.
+6. **An expired attempt never consumes the token** (the claim is never reached), and the
+   check-in record is built from the token lookup, never from the body (S8).
+
+## TDD evidence
+
+- **RED → GREEN:** `check-in.int.spec.ts` — 11 tests authored first (RED on the route-less
+  tree), then 7 added by the review-fix batch → **18 passed (18)**.
+- **Mutation campaign (independent, focused slice suite per mutant):** expiry guard removed ·
+  event-end boundary flipped · claim condition dropped · claim result ignored · `$transaction`
+  removed · expiry vs `issuedAt` (two spellings) · assignment half dropped · role half
+  dropped · provider admitted · scope guard bypassed · 409→400 · 410→400 · 201→200 · empty
+  token accepted · non-string token accepted · reuse precedence removed · claim-lost reason
+  changed · the repository's defensive null branch removed. **Round 1** (pre-correction tree,
+  15 mutants) → **13 killed, 2 survived**: the `event.end` boundary and the missing
+  `$transaction` rollback — both were test gaps, and both are now pinned by new tests.
+  **Round 2** (corrected tree, 19 mutants) → **18 killed, 1 survived**: the repository's
+  defensive `qr === null` branch. It is NOT an equivalent mutant — it IS reachable in the
+  window between the guard's token read and the repository's own pre-read, and it is
+  load-bearing there (without it a mid-request deletion dereferences null and answers 500
+  instead of the generic 403). No test can orchestrate that window, so the branch is
+  documented rather than pinned.
+- **Judgment Day (two blind judges, fresh context):** round 1 → 1 WARNING confirmed by BOTH
+  (reuse-vs-expiry precedence), 1 WARNING pre-existing (the BR-13 toggle hole → PR-4), plus
+  SUGGESTIONs on the write-contract location, two stale comments, the duplicate token
+  resolution, the expiry read outside the transaction, the cross-repository import and the
+  409/410 vocabulary. The two round-1 mutation survivors (boundary, transaction rollback)
+  were test gaps and are now pinned. Correction batch applied → round 2 scoped re-judgment:
+  **APPROVED**. Both judges re-verified F1, M2, M5, F3, F4, F9 and F10 against the live tree and
+  found **no fix-caused behavioural defect**; the round-2 findings were about the published
+  bookkeeping (the OpenSpec edit landed after the judges were launched; the fallback comment
+  was still imprecise in the other window; the mutant count and the M17 characterisation were
+  off) — all corrected in this same work unit before the commit.
+
+## Verification gates (actual output, after the correction batch)
+
+| Gate                                                | Result                                                                                   |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `npm run test:unit`                                 | **159 passed (159)**, 11 files                                                           |
+| `npm run test:int`                                  | **159 passed (159)**, 15 files (hermetic: per-file temp SQLite, the dev DB is untouched) |
+| `npx tsc --noEmit -p tsconfig.app.json`             | exit 0                                                                                   |
+| `npx tsc --noEmit -p tsconfig.spec.json`            | exit 0                                                                                   |
+| `npm run build`                                     | exit 0, prerender 1 static route                                                         |
+| `npx prettier --check` (5 slice files)              | all clean                                                                                |
+| `node scripts/verify-parity.mjs --slice all --json` | **57 pass / 0 fail**                                                                     |
+| Mutation campaign                                   | round 1: 13/15 killed · round 2: 18/19 killed (1 race-window branch)                     |
+| Tree restore after the campaign                     | byte-exact (`md5sum` against the backup)                                                 |
+
+## Code-line count vs 400 budget
+
+| Unit                                                   | Unified (excl. blanks/comments) | Raw     |
+| ------------------------------------------------------ | ------------------------------- | ------- |
+| `check-in.int.spec.ts` (new)                           | 305                             | 426     |
+| `repositories/check-ins.ts` (new)                      | 65                              | 106     |
+| `authz.ts` + `index.ts` + `write-validation.ts` (mod.) | 55                              | 89      |
+| **Total**                                              | **425**                         | **621** |
+
+**425 vs the 400 guide — overage approved by the user** (+6.25%). Production code alone is
+**120** unified lines; the other 305 are the integration spec, which is review-light in the
+same way PR-1a's schema+SQL were. Not code-golfed: nothing was trimmed to fit the budget.
+
+**Risk:** item 2 (the `canCheckIn` guard decides who may scan — authz) + item 4 (the
+single-use claim is a concurrency-sensitive conditional update). Verified by the independent
+mutation campaign, the two blind judges, and the native risk assessment after the commit.
+
+## Files touched
+
+- **New:** `src/server/api/check-in.int.spec.ts` (18 tests),
+  `src/server/data/repositories/check-ins.ts`
+- **Modified:** `src/server/api/authz.ts` (`canCheckIn`), `src/server/api/index.ts`
+  (`checkInScope` + `POST /api/check-ins`), `src/server/api/write-validation.ts`
+  (`parseCheckInInput`)
+- **Docs:** `openspec/changes/persistence-prisma-sqlite/tasks.md` (3b.5, 3b.6) and this file
+- **Untouched:** `prisma/**`, `src/app/**`, every pre-existing route.
+
+## Open follow-ups (INFO — recorded, not fixed here)
+
+1. **BR-13 toggle hole (pre-existing, owner PR-4):** `CheckIn.active` and the companion
+   `active` flag have no toggle route; the traceability table credits tasks 2a.8–2a.9, which
+   predate check-ins.
+2. **Duplicate token resolution per scan (owner PR-4/client wiring):** the guard parses and
+   resolves the token and the handler resolves it again — two hashes and two indexed reads
+   per scan.
+3. **Expiry read outside the transaction:** `event.end` is read before the claim. The expiry
+   is defined AT SCAN TIME (req 8), so this is not a correctness gap; making it atomic would
+   need a relation filter on `updateMany`.
+4. **`hashQrToken` lives in the issuance repository:** `check-ins.ts` is the only repository
+   importing from a sibling. Reusing the single definition of the token format is the point;
+   moving it would re-touch the committed slice-1 file.
+5. **409/410 vocabulary:** the first non-400 state-conflict codes in the API — the client
+   wiring (PR-4) must learn them.
+6. Pre-existing open items (re-seed FK footgun → PR-4; `candidateUserId` name resolution;
+   photos TDD exception; PR-2b suggestions S1–S4) are unchanged and out of this slice.

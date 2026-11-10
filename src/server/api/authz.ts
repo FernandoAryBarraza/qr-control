@@ -56,6 +56,25 @@ export function canDecideAdminRequest(caller: CallerContext): boolean {
 }
 
 /**
+ * Design §5: check-in is the ONE write a security member performs — the door role.
+ * The token resolves its event, and the caller must be assigned to that event as
+ * either its admin or its security staff. Two INDEPENDENT halves: the ROLE half
+ * admits only admin/security, and the ASSIGNMENT half admits only the event the
+ * token belongs to. The provider is excluded by the ROLE half, not by the
+ * assignment half — it is never assigned, but the role check still holds if a
+ * stray EventAssignment row ever appears for it.
+ */
+export function canCheckIn(
+  caller: CallerContext,
+  eventId: string | null,
+  ids: readonly string[],
+): boolean {
+  if (eventId === null) return false;
+  if (caller.role !== 'admin' && caller.role !== 'security') return false;
+  return ids.includes(eventId);
+}
+
+/**
  * S8: the ONE object-scope decision shared by every write route (event-addressed
  * and row-addressed). `eventId` is the object's owning event; `null` means the
  * object does not exist and is denied for every caller — a nonexistent object
