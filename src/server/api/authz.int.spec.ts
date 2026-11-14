@@ -7,6 +7,8 @@ import { apiFetch } from '../testing/integration-harness';
 import {
   canCreateEvent,
   canReadEvent,
+  canReadQrImage,
+  canVerifyQr,
   canWriteEvent,
   isCallerRole,
   resolveEventScope,
@@ -114,6 +116,36 @@ describe('authorization decisions', () => {
     ['admin with the assignment', 'admin', ['ev-001'], true],
   ])('canWriteEvent: %s → %s', (_label, role, ids, expected) => {
     expect(canWriteEvent({ userId: 'usr-002', role }, 'ev-001', ids)).toBe(expected);
+  });
+
+  // The QR verification is the SAME door read as the scan (design §5): admin or
+  // security, assigned to the token's event. Both halves are covered independently
+  // — the provider row proves the ROLE half, the admin row the ASSIGNMENT half.
+  it.each<[string, CallerRole, readonly string[], boolean]>([
+    ['provider assigned to the event', 'provider', ['ev-001'], false],
+    ['security assigned to the event', 'security', ['ev-001'], true],
+    ['admin without the assignment', 'admin', ['ev-002'], false],
+    ['admin with the assignment', 'admin', ['ev-001'], true],
+  ])('canVerifyQr: %s → %s', (_label, role, ids, expected) => {
+    expect(canVerifyQr({ userId: 'usr-002', role }, 'ev-001', ids)).toBe(expected);
+  });
+
+  // The QR image is an ADMIN-level artifact (design §5): the security role that
+  // scans at the door does not read it, and an unknown token is denied for
+  // every caller.
+  it.each<[string, CallerRole, readonly string[], boolean]>([
+    ['provider assigned to the event', 'provider', ['ev-001'], false],
+    ['security assigned to the event', 'security', ['ev-001'], false],
+    ['admin without the assignment', 'admin', ['ev-002'], false],
+    ['admin with the assignment', 'admin', ['ev-001'], true],
+  ])('canReadQrImage: %s → %s', (_label, role, ids, expected) => {
+    expect(canReadQrImage({ userId: 'usr-002', role }, 'ev-001', ids)).toBe(expected);
+  });
+
+  it('denies every QR read when the token resolves to no event', () => {
+    const admin = { userId: 'usr-002', role: 'admin' } as const;
+    expect(canVerifyQr(admin, null, ['ev-001'])).toBe(false);
+    expect(canReadQrImage(admin, null, ['ev-001'])).toBe(false);
   });
 });
 

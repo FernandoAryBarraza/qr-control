@@ -56,21 +56,63 @@ export function canDecideAdminRequest(caller: CallerContext): boolean {
 }
 
 /**
- * Design §5: check-in is the ONE write a security member performs — the door role.
- * The token resolves its event, and the caller must be assigned to that event as
- * either its admin or its security staff. Two INDEPENDENT halves: the ROLE half
- * admits only admin/security, and the ASSIGNMENT half admits only the event the
- * token belongs to. The provider is excluded by the ROLE half, not by the
- * assignment half — it is never assigned, but the role check still holds if a
- * stray EventAssignment row ever appears for it.
+ * Design §5: the door read shared by the scan and the QR verification. The token
+ * resolves its event, and the caller must be assigned to that event as either its
+ * admin or its security staff. Two INDEPENDENT halves: the ROLE half admits only
+ * admin/security, and the ASSIGNMENT half admits only the event the token belongs
+ * to. The provider is excluded by the ROLE half, not by the assignment half — it is
+ * never assigned, but the role check still holds if a stray EventAssignment row ever
+ * appears for it.
  */
-export function canCheckIn(
+function canActAtDoor(
   caller: CallerContext,
   eventId: string | null,
   ids: readonly string[],
 ): boolean {
   if (eventId === null) return false;
   if (caller.role !== 'admin' && caller.role !== 'security') return false;
+  return ids.includes(eventId);
+}
+
+/**
+ * Design §5: check-in is the ONE write a security member performs — the door role.
+ * The token resolves its event, and the caller must be assigned to that event as
+ * either its admin or its security staff.
+ */
+export function canCheckIn(
+  caller: CallerContext,
+  eventId: string | null,
+  ids: readonly string[],
+): boolean {
+  return canActAtDoor(caller, eventId, ids);
+}
+
+/**
+ * Design §5 matrix: `GET /api/qr/verify/:token` — assigned security/admin; the token
+ * resolves the event and the caller must be assigned to it. The SAME door read as the
+ * scan: it is the same staff, on the same event, at the same moment — resolving the
+ * token and consuming it are two halves of one check.
+ */
+export function canVerifyQr(
+  caller: CallerContext,
+  eventId: string | null,
+  ids: readonly string[],
+): boolean {
+  return canActAtDoor(caller, eventId, ids);
+}
+
+/**
+ * Design §5 matrix: `GET /api/qr/image/:token` — assigned ADMIN only, scoped to the
+ * token's own event. The image is an admin-level artifact (it is the printable QR of
+ * a party), so the security role that scans at the door does not read it.
+ */
+export function canReadQrImage(
+  caller: CallerContext,
+  eventId: string | null,
+  ids: readonly string[],
+): boolean {
+  if (eventId === null) return false;
+  if (caller.role !== 'admin') return false;
   return ids.includes(eventId);
 }
 

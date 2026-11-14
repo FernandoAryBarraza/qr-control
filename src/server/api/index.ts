@@ -18,16 +18,20 @@ import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repo
 import { createSecurityMember, listMembers } from '../data/repositories/members';
 import { createPhoto, listPhotos, photoEventId, updatePhoto } from '../data/repositories/photos';
 import { issueQr } from '../data/repositories/qr';
+import { verifyQrByToken } from '../data/repositories/qr-verify';
 import { checkInByToken, qrEventIdByToken } from '../data/repositories/check-ins';
 import {
   canCheckIn,
   canCreateEvent,
   canDecideAdminRequest,
   canReadEvent,
+  canReadQrImage,
+  canVerifyQr,
   canWriteObject,
   resolveEventScope,
 } from './authz';
 import { callerContext, callerOf } from './caller-context';
+import { renderQrPng } from './qr-image';
 import {
   parseAdminRequestInput,
   parseAdminRequestPatch,
@@ -54,6 +58,7 @@ apiRouter.get('/health', async (_req, res) => {
 
 /** Express 5 types `req.params` values as `string | string[]`; routes expect a scalar. */
 const pathId = (req: Request): string => String(req.params['id'] ?? '');
+const pathToken = (req: Request): string => String(req.params['token'] ?? '');
 
 // Generic 4xx payloads (spec req 3): a rejection never echoes row contents, and an
 // out-of-scope row is indistinguishable from a nonexistent one.
@@ -124,6 +129,36 @@ const checkInScope = async (req: Request, res: Response, next: NextFunction): Pr
   const eventId = await qrEventIdByToken(parsed.value.token);
   const assigned = await assignedEventIds(caller.userId);
   if (!canCheckIn(caller, eventId, assigned)) {
+    forbidden(res);
+    return;
+  }
+  next();
+};
+
+// GET /api/qr/verify/:token — the token in the PATH resolves the owning event, so
+// this guard cannot be event-addressed: look the token up, then authorize the
+// assigned admin/security of THAT event (design §5). An unknown token and a
+// foreign-event token get the same byte-identical 403, so a token can never be
+// probed (spec req 3).
+const qrVerifyScope = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const caller = callerOf(res);
+  const eventId = await qrEventIdByToken(pathToken(req));
+  const assigned = await assignedEventIds(caller.userId);
+  if (!canVerifyQr(caller, eventId, assigned)) {
+    forbidden(res);
+    return;
+  }
+  next();
+};
+
+// GET /api/qr/image/:token — the server-rendered PNG of the QR (design §6). The
+// image is an ADMIN-level artifact (the printable QR of a party), so the role half
+// admits the event's admin only — scoped to the token's own event.
+const qrImageScope = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const caller = callerOf(res);
+  const eventId = await qrEventIdByToken(pathToken(req));
+  const assigned = await assignedEventIds(caller.userId);
+  if (!canReadQrImage(caller, eventId, assigned)) {
     forbidden(res);
     return;
   }
@@ -352,4 +387,31 @@ apiRouter.post('/check-ins', callerContext, checkInScope, async (req, res) => {
   }
   res.set('Cache-Control', 'no-store');
   res.status(201).json(outcome.value);
+});
+
+// GET /api/qr/verify/:token — resolves an issued token to the attendee it
+// identifies and to the QR's validity state (spec req 6, scenario 2 / BR-07; req 10,
+// scenario 2 / BR-11). The guard already proved the caller is the event's assigned
+// admin or security. The attendee comes from the token lookup, never from the
+// request (S8); a token that resolves to no row gets the same generic denial as a
+// foreign one.
+apiRouter.get('/qr/verify/:token', callerContext, qrVerifyScope, async (req, res) => {
+  const verification = await verifyQrByToken(pathToken(req));
+  if (verification === null) {
+    forbidden(res);
+    return;
+  }
+  // The response carries attendee names and the QR state: it must never be cached.
+  res.set('Cache-Control', 'no-store');
+  res.json(verification);
+});
+
+// GET /api/qr/image/:token — the server-rendered PNG of the QR (design §6): the
+// payload is the absolute verify URL. `no-store` because the encoded image carries
+// the raw token — a cached copy would outlive the QR it represents.
+apiRouter.get('/qr/image/:token', callerContext, qrImageScope, async (req, res) => {
+  const png = await renderQrPng(pathToken(req));
+  res.set('Cache-Control', 'no-store');
+  res.set('Content-Type', 'image/png');
+  res.send(png);
 });

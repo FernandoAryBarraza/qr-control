@@ -403,6 +403,46 @@ describe('single-use QR check-in and expiry (spec req 7, 8 / BR-08, BR-09)', () 
     expect(await getPrisma().checkIn.count()).toBe(1);
   });
 
+  // Spec req 3 + the mutation campaign (M21/M22): the scope check runs in BOTH
+  // directions. A one-directional cross-event test cannot see a guard that stops
+  // resolving the token's OWN event — the foreign caller stays unassigned to ev-001
+  // either way, so it is refused for the WRONG reason, while another event's QR
+  // stays scannable (and consumable). The token's own admin must succeed AND
+  // another event's admin must be refused.
+  it('scopes the scan to the token’s own event in both directions', async () => {
+    const guestRes = await request('POST', '/api/events/ev-002/guests', ADMIN_EV2, {
+      name: 'Evento Dos',
+      email: '',
+      phone: '',
+      table: 2,
+      note: '',
+      status: 'confirmed',
+      party: [],
+    });
+    expect(guestRes.status).toBe(201);
+    const guest = (await guestRes.json()) as { readonly id: string };
+
+    const qrRes = await request('POST', '/api/events/ev-002/qr', ADMIN_EV2, {
+      kind: 'guest',
+      guestId: guest.id,
+    });
+    expect(qrRes.status).toBe(201);
+    const { token } = (await qrRes.json()) as { readonly token: string };
+
+    // ev-002's OWN admin scans it — the event is live, so the scan succeeds.
+    await getPrisma().event.update({
+      where: { id: 'ev-002' },
+      data: { end: new Date(future()) },
+    });
+    expect((await scan(token, ADMIN_EV2)).status).toBe(201);
+
+    // Another event's admin cannot. The scope is decided BEFORE the state, so the
+    // answer is the generic 403 — not the 409 this consumed token would earn.
+    const outsider = await scan(token, ADMIN_EV1);
+    expect(outsider.status).toBe(403);
+    expect(await outsider.json()).toEqual({ statusCode: 403, message: 'Forbidden' });
+  });
+
   // Req 7: the rejection holds "regardless of scanner role or endpoint path" — a
   // token used by the security desk is not reusable by the event's admin.
   it('rejects reuse regardless of the scanner role', async () => {
