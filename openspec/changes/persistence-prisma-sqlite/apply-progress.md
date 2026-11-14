@@ -2033,8 +2033,16 @@ wiring (PR-4), no emergency-issuance work (already covered by 3b.3/3b.4).
       CONSUME) an ev-002 QR undetected. Closed in this slice with the symmetric pair on the
       scan path (user-approved: the slice goes over the 400 budget by 23 lines).
 - **Judgment Day (two blind judges, fresh context):** the first launch died on the provider's
-  free-tier usage limit (not a verdict); relaunched on alternative models. Result recorded
-  below.
+  free-tier usage limit (NOT a verdict); relaunched on alternative models
+  (`deepseek-v4.1-flash-free` / `glm-5.3-flash-free`). **Both judges returned ZERO findings**
+  (`{"findings":[]}`) → **APPROVED**, no correction batch and no scoped re-judgment needed.
+  Judge A independently re-verified the §5 scope matrix, the BR-09 inclusive boundary, the
+  BR-07 parent linkage, the "used before expired" precedence, the single `qrVerifyUrl`
+  definition, the absence of any token/`tokenHash` in the response body, `no-store` on both
+  200s, the route registration (no shadowing pattern, base64url-safe path segment), the
+  cascade FKs, the terminal error handler and the seeded fixture ids of the new symmetric
+  test. Judge B re-verified the same invariants plus the byte-pinned PNG reference render and
+  the "the guard authorizes, the repository re-reads to close the delete race window" shape.
 
 ### Verification gates (actual output, after the correction batch)
 
