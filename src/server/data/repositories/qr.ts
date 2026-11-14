@@ -37,7 +37,12 @@ export function hashQrToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function verifyUrlFor(token: string): string {
+/**
+ * The absolute URL the QR encodes (design §6): `<WEB_BASE_URL>/verify/<rawToken>`.
+ * ONE definition — the issuance response and the server-rendered PNG share it, so
+ * the printed image and the emailed link can never drift apart.
+ */
+export function qrVerifyUrl(token: string): string {
   return `${getWebBaseUrl()}/verify/${token}`;
 }
 
@@ -140,5 +145,5 @@ export async function issueQr(eventId: string, input: QrIssueInput): Promise<QrI
     return { ok: true as const };
   });
 
-  return created.ok ? { ok: true, issued: { token, verifyUrl: verifyUrlFor(token) } } : created;
+  return created.ok ? { ok: true, issued: { token, verifyUrl: qrVerifyUrl(token) } } : created;
 }

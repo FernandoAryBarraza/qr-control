@@ -1955,3 +1955,153 @@ mutation campaign, the two blind judges, and the native risk assessment after th
    wiring (PR-4) must learn them.
 6. Pre-existing open items (re-seed FK footgun → PR-4; `candidateUserId` name resolution;
    photos TDD exception; PR-2b suggestions S1–S4) are unchanged and out of this slice.
+
+---
+
+## PR-3b — slice 3: QR verification + PNG image (tasks 3b.7 + 3b.8)
+
+**Branch:** `feat/prototype-styling-tailwind` (stacked-to-main chain; slice 3 of 3 of PR-3b)
+**Base commit:** `227cb80` (PR-3b slice 2 — single-use check-in)
+**Scope:** the two read endpoints the design §5 matrix assigns to PR-3b —
+`GET /api/qr/verify/:token` and `GET /api/qr/image/:token`. No `prisma/**` change, no client
+wiring (PR-4), no emergency-issuance work (already covered by 3b.3/3b.4).
+
+### Decisions (spec silent or ambiguous — resolved here)
+
+1. **The verification is the SAME door read as the scan.** design §5 gives
+   `GET /api/qr/verify/:token` the same scope rule as `POST /api/check-ins` ("assigned
+   security/admin; token resolves event; caller assigned to it"), so `canCheckIn` and the new
+   `canVerifyQr` now share ONE private `canActAtDoor` helper instead of two copies of the
+   same rule. The provider stays excluded by the ROLE half even if a stray `EventAssignment`
+   row exists.
+2. **The PNG is an ADMIN-level artifact.** design §5 gives `GET /api/qr/image/:token`
+   "assigned admin" — NOT "security/admin" like the verification — so `canReadQrImage` is
+   admin-only: the printable QR of a party is the admin's artifact, while the security role
+   that scans at the door does not read it. The two rules differ ON PURPOSE; both halves of
+   both rules are pinned by table tests in `authz.int.spec.ts`.
+3. **The validity state reuses the scan's precedence.** A consumed QR reads as `used` even
+   after the event ended (req 7's reuse scenario is unscoped in time; req 8's expiry scenario
+   is scoped to a valid UNCONSUMED QR) — the same order `checkInByToken` uses.
+4. **The parent guest is resolved through the companion's own guest.** BR-07's linkage lives
+   in `QrToken.parentQrId` (the parent QR RECORD), but the parent GUEST of a companion is,
+   by construction, the companion's guest — the two agree because issuance only links a
+   companion QR to the guest QR of the same guest. Resolving it through the relation keeps
+   the read to ONE indexed query; the test asserts that the parent the response reports is
+   the guest of the STORED `parentQrId` row, so the linkage stays proven.
+5. **Both responses are `no-store`.** The verification carries attendee names and the QR
+   state; the PNG carries the raw token. Neither may be cached.
+6. **The verify URL has ONE definition.** The private `verifyUrlFor` became the exported
+   `qrVerifyUrl`, so the issuance response and the rendered image can never drift apart (the
+   PNG reference-render test pins exactly that).
+7. **An unknown token is refused before it is resolved.** The guard resolves the token →
+   event with `qrEventIdByToken` (cheap, indexed) and the handler re-resolves it with
+   `verifyQrByToken` (full attendee linkage) — the same shape as the scan path, and the same
+   known duplicate-resolution follow-up. The guard therefore denies an unknown token BEFORE
+   the handler runs; the repository's `null` contract is pinned at the repository seam
+   instead (see the mutation campaign below).
+
+### TDD evidence
+
+- **RED → GREEN:** `qr-verify.int.spec.ts` — 7 tests authored first against the route-less
+  tree (**RED 7/7**: every assertion saw the 404) → **GREEN 7/7** → **10/10** after the
+  mutation-fix batch. The 10 tests: companion → companion **and** parent guest (+ the BR-07
+  linkage the issuance stored), guest → its own guest, emergency → no attendee, validity
+  state (`valid`/`used`/`expired`), the inclusive `event.end` boundary on a frozen clock, the
+  repository's null contract, the symmetric cross-event scope, the PNG (`image/png`,
+  `no-store`, PNG signature, 512x512 header, byte-equality with the design §6 reference
+  render) and the image scope.
+- **Mutation campaign (independent, fresh context, in a scratch copy OUTSIDE the repo):**
+  - **Round 1 (pre-correction tree), 19 mutants → 17 killed, 2 survived:**
+    - the `event.end` boundary (`<=` → `<`): the fixture dates (now-60s / now+6h) never sit ON
+      the boundary and, on a live clock, the two operators are indistinguishable. Now pinned
+      by a frozen-clock test (`vi.useFakeTimers({ toFake: ['Date'] })` — the harness runs the
+      Express app in the same vitest process, so the SERVER's `Date.now()` freezes too).
+    - the repository's `null` contract: the guard already refuses an unknown token, so the
+      repository's branch was unreachable from HTTP. Now pinned at the repository seam
+      (`verifyQrByToken('not-a-real-token')` → `null`; a deleted QR stops resolving).
+  - **Round 2 (corrected tree), 19 canonical mutants → 19 killed, 0 survived.** No mutant
+    regressed from KILLED to SURVIVED — the two new tests disarmed nothing.
+  - **Two extra probes, both SURVIVED, both now closed:**
+    - **M21 — the guard stops resolving the token's OWN event.** A ONE-DIRECTIONAL cross-event
+      test cannot see it: the foreign caller stays unassigned to ev-001 either way, so a
+      guard hardcoding `eventId = 'ev-001'` still answers 403 — while handing another event's
+      attendee record (and its raw token) to the wrong admin. Closed by a symmetric test:
+      the token's own admin (ev-002's admin) reads both artifacts, and another event's admin
+      reads neither.
+    - **M22 — the same hardcode in the COMMITTED slice-2 guard (`checkInScope`).** The gap is
+      systemic, not verify-specific: a broken guard there would let ev-001's admin scan (and
+      CONSUME) an ev-002 QR undetected. Closed in this slice with the symmetric pair on the
+      scan path (user-approved: the slice goes over the 400 budget by 23 lines).
+- **Judgment Day (two blind judges, fresh context):** the first launch died on the provider's
+  free-tier usage limit (not a verdict); relaunched on alternative models. Result recorded
+  below.
+
+### Verification gates (actual output, after the correction batch)
+
+| Gate                                                | Result                                                              |
+| --------------------------------------------------- | ------------------------------------------------------------------- |
+| `npm run test:unit`                                 | **159 passed (159)**, 11 files                                      |
+| `npm run test:int`                                  | **179 passed (179)**, 16 files (hermetic: per-file temp SQLite)     |
+| `npx tsc --noEmit -p tsconfig.app.json`             | exit 0                                                              |
+| `npx tsc --noEmit -p tsconfig.spec.json`            | exit 0                                                              |
+| `npm run build`                                     | exit 0, prerender 1 static route                                    |
+| `npx prettier --check` (8 slice files)              | all clean                                                           |
+| `node scripts/verify-parity.mjs --slice all --json` | **57 pass / 0 fail**                                                |
+| Mutation campaign                                   | round 1: 17/19 killed · round 2: **19/19 killed** + 2 probes closed |
+
+### Code-line count vs 400 budget
+
+| Unit                                                                                    | Unified (excl. blanks/comments) | Raw     |
+| --------------------------------------------------------------------------------------- | ------------------------------- | ------- |
+| `qr-verify.int.spec.ts` (new)                                                           | 243                             | 362     |
+| `repositories/qr-verify.ts` (new)                                                       | 58                              | 82      |
+| `api/qr-image.ts` (new)                                                                 | 5                               | 11      |
+| `authz.ts` + `index.ts` + `qr.ts` + `authz.int.spec.ts` + `check-in.int.spec.ts` (mod.) | 117                             | 189     |
+| **Total**                                                                               | **423**                         | **644** |
+
+**423 vs the 400 guide — overage of 23 lines (5.75%), USER-APPROVED** in this session (the
+approval covered closing M22, the symmetric check-in scope test, which adds 27 unified lines).
+Production code alone is **128** unified lines; the other 295 are integration specs, which are
+review-light in the same way PR-1a's schema+SQL were. Not code-golfed: nothing was trimmed to
+fit the budget.
+
+**Risk:** item 2 (the `canVerifyQr` / `canReadQrImage` guards decide who may read a QR and the
+attendee names behind it — authz) + item 4 (the validity state is a time-bound read against
+`event.end`). Verified by the independent mutation campaign (19/19 canonical mutants killed,
+two measured gaps closed), the gate set, and the native risk assessment after the commit.
+
+### Files touched
+
+- **New:** `src/server/api/qr-verify.int.spec.ts` (10 tests),
+  `src/server/data/repositories/qr-verify.ts` (`verifyQrByToken`),
+  `src/server/api/qr-image.ts` (`renderQrPng`)
+- **Modified:** `src/server/api/authz.ts` (`canActAtDoor`, `canVerifyQr`, `canReadQrImage`),
+  `src/server/api/index.ts` (`qrVerifyScope`, `qrImageScope` + the two routes),
+  `src/server/data/repositories/qr.ts` (`qrVerifyUrl`),
+  `src/server/api/authz.int.spec.ts` (the two predicate tables + the null-event case),
+  `src/server/api/check-in.int.spec.ts` (ONE added test: the symmetric cross-event scope)
+- **Docs:** `openspec/changes/persistence-prisma-sqlite/tasks.md` (3b.7, 3b.8) and this file
+- **Untouched:** `prisma/**`, `src/app/**`, every pre-existing route.
+
+### Open follow-ups (INFO — recorded, not fixed here)
+
+1. **The attendee-facing `/verify/<token>` page has no identity in the current caller model.**
+   The QR encodes the WEB url `<WEB_BASE_URL>/verify/<token>`, but the API contract
+   (design §5) scopes `GET /api/qr/verify/:token` to the event's ASSIGNED staff, and the
+   caller model has no authentication yet (BR-01). PR-4's client wiring must decide how the
+   attendee reads their own QR (public read? a second scope? a signed link?) — the API cannot
+   answer that alone.
+2. **Duplicate token resolution per QR read (owner PR-4/client wiring):** the guard resolves
+   the token → event and the handler resolves it again — two hashes and two indexed reads per
+   verification. Same known follow-up as the scan path (slice 2, item 2).
+3. **The route's `verification === null` branch is defence-in-depth, not live logic.** It is
+   reachable only in the TOCTOU window between the guard's read and the repository's read
+   (the same window slice 2 documented for `check-ins.ts`). Documented, not pinned: the
+   integration layer runs the real app and the real DB, and pinning it would mean introducing
+   module mocking into that layer. The repository's own `null` contract IS pinned.
+4. **The client-facing PNG URL is not exposed as a URL yet.** The endpoint takes the raw
+   token; PR-4's client wiring needs to compose `/api/qr/image/<token>` for the email
+   template (email transport itself stays a Non-Goal).
+5. Pre-existing open items (BR-13 toggle hole → PR-4; re-seed FK footgun → PR-4;
+   `candidateUserId` name resolution; photos TDD exception; PR-2b suggestions S1–S4) are
+   unchanged and out of this slice.

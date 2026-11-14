@@ -627,15 +627,37 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 📍 3b �
       guard's token read and the repository's own pre-read, and load-bearing there — without
       it a mid-request deletion answers 500 instead of the generic 403 — but no test can
       orchestrate that window, so it is documented rather than pinned).
-- [ ] **3b.7** **Test-first (RED):** write `src/server/api/qr-verify.int.spec.ts` — verify
+- [x] **3b.7** **Test-first (RED):** write `src/server/api/qr-verify.int.spec.ts` — verify
       endpoint resolves a companion token to the specific companion **and its parent guest**;
       resolves guest/emergency tokens; issued-raw-token PNG endpoint returns `image/png`
       (`QRCode.toBuffer(url, { type:'png', width:512, margin:2 })`); wrong-event caller
       rejected. _Traces: BR-07 → spec req 6 (scenario 2); BR-10 emergency issuance scoped →
       spec req 9 (both scenarios, emergency issuance test lives here too); BR-11 → spec req 10
-      (scenario 2)._
-- [ ] **3b.8** Implement `GET /api/qr/verify/:token`, `GET /api/qr/image/:token` (+ emergency
-      issuance path if not already covered by 3b.4). 🚧 after 3b.7.
+      (scenario 2)._ — **RED 7 failed (7)** (`/tmp/opencode/pr-3b/RED-3b.7.txt` — every
+      assertion saw the route-less tree's 404) → **GREEN 7 passed (7)**, then **9 passed (9)**
+      after the mutation-fix batch. Nine tests: companion → companion **and** parent guest
+      (+ the BR-07 linkage the issuance stored), guest → its own guest, emergency → no
+      attendee, validity state (`valid` / `used` / `expired`), scope (foreign admin, provider,
+      anonymous, unknown token), the PNG (`image/png`, `no-store`, PNG signature, 512x512
+      header, byte-equality with the design §6 reference render), and the image scope
+      (admin only). **Emergency issuance was already covered in 3b.3** (req 9, both
+      scenarios) — no duplicate test here.
+- [x] **3b.8** Implement `GET /api/qr/verify/:token`, `GET /api/qr/image/:token` (+ emergency
+      issuance path if not already covered by 3b.4). 🚧 after 3b.7. — `verifyQrByToken`
+      repository (token → attendee + validity state, `null` for an unknown row);
+      `canVerifyQr` (the door read, extracted with `canCheckIn` into `canActAtDoor`) and
+      `canReadQrImage` (admin-only, per the design §5 matrix) with `qrVerifyScope` /
+      `qrImageScope` guards (token → event → assignment); `renderQrPng` renders the
+      absolute verify URL server-side; the emergency path was already covered by 3b.4
+      (`kind: 'emergency'`), so nothing was added for it. **Mutation campaign:** round 1
+      (pre-correction tree) 19 mutants → **17 killed, 2 survived** (the `event.end` boundary
+      and the repository's `null` contract — both real test gaps, now pinned by two new
+      tests); round 2 (corrected tree) **19/19 killed**, no mutant disarmed. Two extra
+      probes survived and were closed: **M21** (a guard that stops resolving the token's own
+      event — invisible to a one-directional cross-event test) closed by the symmetric scope
+      test on both QR reads, and **M22** (the same hardcode in the COMMITTED slice-2
+      `checkInScope`) closed by the symmetric scope test on the scan path — user-approved
+      overage (423 vs the 400 guide, +5.75%).
 - [ ] **3b.9** Run the PR verification gate (ground rule 2); PR body must cite the proposal
       success criterion "single-use, expiry guest+companion+emergency, companion linkage,
       opaque payload".
