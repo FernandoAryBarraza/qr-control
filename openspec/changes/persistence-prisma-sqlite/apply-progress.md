@@ -2113,3 +2113,66 @@ two measured gaps closed), the gate set, and the native risk assessment after th
 5. Pre-existing open items (BR-13 toggle hole → PR-4; re-seed FK footgun → PR-4;
    `candidateUserId` name resolution; photos TDD exception; PR-2b suggestions S1–S4) are
    unchanged and out of this slice.
+
+---
+
+## PR-3b — task 3b.9: PR verification gate + PR body
+
+**Branch:** `feat/prototype-styling-tailwind` **HEAD at gate time:** `3cc974c` (tree clean)
+**Scope:** verification only plus one review-facing document. No source, schema, route or test
+changed by this task.
+
+### Gate (ground rule 2), run on `3cc974c`
+
+| Gate                                    | Result                                                 |
+| --------------------------------------- | ------------------------------------------------------ |
+| `npm run test:unit`                     | **159 passed (159)**, 11 files                         |
+| `npm run test:int`                      | **179 passed (179)**, 16 files (per-file temp SQLite)  |
+| `npx prettier --check .`                | clean                                                  |
+| `npx tsc --noEmit -p tsconfig.app.json` | exit 0                                                 |
+| `ng build`                              | exit 0, browser 347.14 kB initial, 1 prerendered route |
+
+**Transient environmental failure, recorded rather than hidden:** the first `ng build` of the
+gate chain aborted with `Inlining of fonts failed` while fetching `fonts.googleapis.com`
+(`EXIT` non-zero). `curl` to the same URL returned 200 immediately after, and the retried
+`ng build` exited 0 in 3.8 s with no change to the tree — so the failure was the font-inlining
+fetch, not the code. Logs: `/tmp/opencode/3b9-gate.log`, `/tmp/opencode/3b9-build.log`
+(outside the repo).
+
+### PR body
+
+Authored at `openspec/changes/persistence-prisma-sqlite/pr-3b-body.md`. It quotes the proposal
+criterion verbatim and maps each clause to the named passing test:
+
+| Clause             | Proving test(s)                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| single-use         | 4 tests in `check-in.int.spec.ts` (first scan, reuse → 409 with no second record, two concurrent scans, reuse across roles)         |
+| expiry — guest     | `rejects a scan at or after event end…`, `rejects a scan exactly at event end…` (frozen clock)                                      |
+| expiry — companion | `rejects a companion QR after event end…`, `checks in a companion QR as its own single-use record`                                  |
+| expiry — emergency | `rejects an emergency QR after event end…`, `issues an emergency QR for the own event only`                                         |
+| companion linkage  | `issues a distinct QR … linked to the parent guest QR`, `resolves a companion token to the specific companion and its parent guest` |
+| opaque payload     | `stores only the SHA-256 of the token…`, `keeps PII out of the token and ignores client-supplied token content`                     |
+
+The body also carries the review path (authz matrix first), the diff basis `b64dbf2` (16 files,
++2546/−17), the gate table, the risk line, and the intentionally out-of-scope list.
+
+### Publication blocker (owner decision, not a code issue)
+
+`git remote -v` is empty and the `gh` CLI is absent on this machine, so the body cannot be
+attached to a PR. Two decisions are now due and both belong to the owner:
+
+1. **Remote + host** — which repository URL the chain pushes to.
+2. **Chain strategy** — `stacked-to-main` (this PR cut from `b64dbf2`) versus a feature-branch
+   chain with a tracker. The plan assumed `stacked-to-main`; the decision was deferred to first
+   PR creation and PR-3b is now the first gate-green batch that needs it.
+
+Recorded as blocked items 1 and 7 in `tasks.md`.
+
+### Files touched
+
+- `openspec/changes/persistence-prisma-sqlite/pr-3b-body.md` (new)
+- `openspec/changes/persistence-prisma-sqlite/tasks.md` (3b.9 checked; blocked items 1 and 7)
+- `openspec/changes/persistence-prisma-sqlite/apply-progress.md` (this section)
+
+**Risk:** none — documentation and verification only. No code, schema, dependency or route
+touched, and the gate ran against the already-committed `3cc974c`.
