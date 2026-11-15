@@ -658,9 +658,18 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 📍 3b �
       test on both QR reads, and **M22** (the same hardcode in the COMMITTED slice-2
       `checkInScope`) closed by the symmetric scope test on the scan path — user-approved
       overage (423 vs the 400 guide, +5.75%).
-- [ ] **3b.9** Run the PR verification gate (ground rule 2); PR body must cite the proposal
+- [x] **3b.9** Run the PR verification gate (ground rule 2); PR body must cite the proposal
       success criterion "single-use, expiry guest+companion+emergency, companion linkage,
-      opaque payload".
+      opaque payload". — **Gate green on `3cc974c`**: unit **159 passed (159)**, int
+      **179 passed (179)**, `prettier --check .` clean, `tsc -p tsconfig.app.json` exit 0,
+      `ng build` exit 0 (1 prerendered route; the first build attempt died on a transient
+      `fonts.googleapis.com` fetch during font inlining — the retry was green, no code change).
+      **PR body authored** at `openspec/changes/persistence-prisma-sqlite/pr-3b-body.md`: it
+      quotes the proposal criterion verbatim and maps each of its 6 clauses (single-use,
+      expiry guest/companion/emergency, companion linkage, opaque payload) to the named
+      passing test. **PR publication is BLOCKED, not done**: the repo has **no git remote**
+      (`git remote -v` empty) and no `gh` CLI, so the body cannot be attached to a PR until the
+      owner decides the remote and the chain strategy (blocked items 1 and 7).
 
 **Suggested work-unit commits:**
 
@@ -769,9 +778,10 @@ All 16 are traced above. Flag if a requirement was expected to be authored but i
 
 | #   | Item                                                                    | When                                      | Status                                                                                                                                                                           |
 | --- | ----------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Chain strategy (stacked-to-main vs feature-branch chain + tracker)      | first PR creation                         | ⚠️ user decision under `ask-always`; plan assumes stacked-to-main                                                                                                                |
+| 1   | Chain strategy (stacked-to-main vs feature-branch chain + tracker)      | first PR creation                         | ⚠️ **DUE NOW** — PR-3b is gate-green and its body is authored, so publication cannot be deferred any longer; plan assumed stacked-to-main (PR-3b cut from `b64dbf2`)             |
 | 2   | Dev `/api/*` passthrough failure → standalone API + proxyConfig (1a.12) | PR-1a                                     | ✅ **RESOLVED** — user approved option a (standalone API process + `/api` proxy, port 3000); smoke green direct + via `ng serve` (see 1a.12 + apply-progress §1a.12-remediation) |
 | 3   | `seed-data.ts` Angular import found (1b.1)                              | PR-1b                                     | ✅ **CHECKED (1b.1)** — zero Angular imports in the type-only chain; no escalation                                                                                               |
 | 4   | `size:exception`                                                        | 1a / 2a / 3b only if sub-split infeasible | pre-approved fallback — NOT consumed by this plan                                                                                                                                |
 | 5   | Spec requirement count 16 vs 17 stated                                  | now                                       | ⚠️ non-blocking, see traceability note                                                                                                                                           |
 | 6   | Postgres switch execution                                               | after this change                         | 🚧 out of scope (non-goal)                                                                                                                                                       |
+| 7   | No git remote (and no `gh` CLI) — PRs cannot be published               | PR-3b gate                                | ⚠️ **BLOCKING publication** — `git remote -v` is empty; PR-3b's body waits at `pr-3b-body.md` until the owner sets the remote URL/host                                           |
