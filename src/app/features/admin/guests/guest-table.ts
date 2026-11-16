@@ -50,11 +50,32 @@ import { GuestDetail } from './guest-detail';
     </div>
   `,
   styles: `
-    .table-wrap { overflow-x: auto; }
-    .gtable { width: 100%; border-collapse: collapse; min-width: 880px; }
-    .gtable th { font: 600 9.5px 'IBM Plex Mono'; letter-spacing: 0.18em; color: var(--soft); text-align: left; padding: 14px 14px; border-bottom: 1px solid var(--line); font-weight: 600; }
-    .gtable th.ta-r { text-align: right; }
-    .empty-row td { text-align: center; padding: 44px 0; color: var(--soft); font: italic 400 16px 'Fraunces'; }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    .gtable {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 880px;
+    }
+    .gtable th {
+      font: 600 9.5px 'IBM Plex Mono';
+      letter-spacing: 0.18em;
+      color: var(--soft);
+      text-align: left;
+      padding: 14px 14px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 600;
+    }
+    .gtable th.ta-r {
+      text-align: right;
+    }
+    .empty-row td {
+      text-align: center;
+      padding: 44px 0;
+      color: var(--soft);
+      font: italic 400 16px 'Fraunces';
+    }
   `,
 })
 export class GuestTable {

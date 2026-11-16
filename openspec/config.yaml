@@ -4,25 +4,26 @@ schema: spec-driven
 context: |
   Tech stack: Angular 22 + SSR (prerender/hydration), TypeScript ~6.0, vitest 4 via `ng test`, Express 5, RxJS 7.8.
   Architecture: standalone components + signals; feature slices (core/features/layout/shared); port of vanilla prototype QR_Z_Open/ (5 slices, 69 tests green).
-  Testing: unit only — vitest 4.1.11 through @angular/build:unit-test; no coverage package, no integration/E2E tools.
+  Testing: unit (vitest 4.1.11 through @angular/build:unit-test, jsdom) + integration (vitest via `npm run test:int`, node env, per-test-file temp SQLite — see design §8); no coverage package, no E2E tools.
   Style: Prettier (.prettierrc) + EditorConfig; no linter installed; NOTE: tsconfig `strict: true` is NOT enabled (only strictInjectionParameters/strictInputAccessModifiers).
 
 strict_tdd: true
 
 testing:
-  test_command: "ng test --watch=false"
-  watch_command: "ng test"
-  runner: "vitest 4.1.11 (via @angular/build:unit-test)"
+  test_command: 'ng test --watch=false'
+  watch_command: 'ng test'
+  runner: 'vitest 4.1.11 (via @angular/build:unit-test)'
   coverage: false
-  coverage_command: "— (requires dev dep @vitest/coverage-v8)"
+  coverage_command: '— (requires dev dep @vitest/coverage-v8)'
   layers:
     unit: true
-    integration: false
+    integration: true
     e2e: false
+  integration_test_command: 'npm run test:int'
   quality:
-    formatter: "npx prettier --check ."
-    type_checker: "npx tsc --noEmit -p tsconfig.app.json && ng build"
-    linter: "— (no ESLint installed)"
+    formatter: 'npx prettier --check .'
+    type_checker: 'npx tsc --noEmit -p tsconfig.app.json && ng build'
+    linter: '— (no ESLint installed)'
 
 rules:
   proposal:
@@ -40,13 +41,13 @@ rules:
     - Keep tasks completable in one session
     - Every behavior change task MUST include its test task
   apply:
+    # Sequence only — tdd/test_command belong to top-level `strict_tdd` and `testing.*`
+    # (mixing mapping keys into this sequence produced invalid YAML).
     - Follow existing code patterns (standalone components, input()/output(), no ngClass/ngStyle)
     - All AXE/WCAG AA accessibility requirements are non-negotiable
-    tdd: true
-    test_command: "ng test --watch=false"
   verify:
-    test_command: "ng test --watch=false"
-    build_command: "ng build"
+    test_command: 'ng test --watch=false'
+    build_command: 'ng build'
     coverage_threshold: 0
   archive:
     - Warn before merging destructive deltas

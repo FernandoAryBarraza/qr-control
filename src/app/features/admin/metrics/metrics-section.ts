@@ -1,4 +1,13 @@
-import { Component, DestroyRef, PLATFORM_ID, afterNextRender, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  PLATFORM_ID,
+  afterNextRender,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 
 import type { FunnelSegment, StatTileDef } from '../../../core/models';
@@ -86,11 +95,15 @@ import { StatTile } from './stat-tile';
       background: var(--accent);
     }
 
+    /* Prototype "ruled row" (QR_Z_Open/style.css:499-503): the row itself
+       carries the top/bottom ink rules; cells only add inter-cell dividers.
+       No flex-wrap here so the global @920px rule can introduce wrapping. */
     .stat-row {
       display: flex;
       gap: 0;
       margin-top: 20px;
-      flex-wrap: wrap;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
     }
   `,
 })

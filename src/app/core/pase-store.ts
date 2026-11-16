@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
+import { DataApiService } from './api/data-api.service';
 import {
   computeMetrics,
   eventFilters,
@@ -33,23 +34,33 @@ function toggleIn(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
 }
 
 /**
- * Single source of truth for both the seed data and the UI state.
+ * Single source of truth for the UI state.
  *
  * Every record is treated as immutable: a mutation replaces the object
  * and the array (`update`, never `mutate`), which is what lets `guests`,
  * `photos` and `events` be shared with the derived `computed()`s without
- * surprises. There is no persistence — the prototype has none either, so
- * a reload replays the seed snapshot exactly.
+ * surprises.
+ *
+ * Hydration-safe read path (design §4 / spec req 15): the store starts from
+ * the bundled seed snapshot in a `loading` state — identical on server and
+ * client, so the prerendered HTML hydrates without mismatch — and `load()`
+ * (browser-only, `afterNextRender`) overwrites the data signals with the
+ * persisted snapshot fetched over HTTP. Mutations apply optimistically to the
+ * signals and persist through `DataApiService`, reverting on API failure (PR-2b).
  */
 @Injectable({ providedIn: 'root' })
 export class PaseStore {
   protected readonly toast = inject(ToastService);
+  private readonly api = inject(DataApiService);
 
   /* ---------- Datos ---------- */
   readonly guests = signal<readonly Guest[]>(GUESTS);
   readonly photos = signal<readonly EventPhoto[]>(PHOTOS);
   readonly events = signal<readonly PaseEvent[]>(EVENTS);
   readonly passPool = signal<readonly Pass[]>(passPoolOf(GUESTS));
+
+  /** True while the initial post-hydration fetch has not settled yet (design §4). */
+  readonly loading = signal(true);
 
   /* ---------- Estado de interfaz ---------- */
   readonly role = signal<Role>('admin');
@@ -130,48 +141,111 @@ export class PaseStore {
     this.expandedEvents.update((set) => toggleIn(set, id));
   }
 
+  /* ---------- Carga inicial (post-hidratación) ---------- */
+  /**
+   * Fetches the persisted snapshot (`GET /api/events` + per-event guests and
+   * photos) and writes it into the signals. Called from `afterNextRender` in
+   * the root component, so the Node render and the first client render only
+   * ever see the bundled state above — no hydration divergence is possible.
+   *
+   * On failure the seed snapshot stays in place (graceful degradation) and a
+   * toast surfaces the error; either way the loading state ends, so UI guards
+   * can never spin forever. `passPool` is rebuilt from the persisted guest IDs
+   * so feed/QR codes cannot point at records the server does not know.
+   */
+  async load(): Promise<void> {
+    try {
+      const events = await this.api.listEvents();
+      const [guestLists, photoLists] = await Promise.all([
+        Promise.all(events.map((event) => this.api.listGuests(event.id))),
+        Promise.all(events.map((event) => this.api.listPhotos(event.id))),
+      ]);
+
+      const guests = guestLists.flat();
+      const photos = photoLists.flat();
+
+      this.events.set(events);
+      this.guests.set(guests);
+      this.photos.set(photos);
+      this.passPool.set(passPoolOf(guests));
+      this.loading.set(false);
+    } catch {
+      this.loading.set(false);
+      this.toast.push('No se pudo cargar la información del servidor', 'warn', 'circleSlash');
+    }
+  }
+
   /* ---------- Mutaciones ---------- */
+  /**
+   * Sends the invitation: optimistically marks the guest `sent`, then persists
+   * via `PATCH /api/guests/:id`. On API failure the status reverts (PR-2b).
+   */
   sendInvite(id: string): void {
     const guest = this.guests().find((g) => g.id === id);
     if (!guest) return;
-    this.setGuestStatus(id, 'sent');
-    this.toast.push(`Invitación enviada por email a ${guest.name}`, 'ok', 'mail');
+    const before = this.guests();
+    void this.persist(
+      () => this.api.patchGuest(id, { status: 'sent' }),
+      () => this.setGuestStatus(id, 'sent'),
+      () => this.guests.set(before),
+      () => this.toast.push(`Invitación enviada por email a ${guest.name}`, 'ok', 'mail'),
+      'No se pudo enviar la invitación',
+    );
   }
 
   /**
    * The prototype pushes the guest and their companions into the pass
    * pool unconditionally (`app.js:781-782`), so confirming twice yields
-   * duplicate codes. Poses are deduplicated here instead.
+   * duplicate codes. Poses are deduplicated here instead. The guest status
+   * AND the pass pool are optimistic and revert together on API failure.
    */
   confirmGuest(id: string): void {
     const guest = this.guests().find((g) => g.id === id);
     if (!guest) return;
-    this.setGuestStatus(id, 'confirmed');
-
-    const confirmed: Guest = { ...guest, status: 'confirmed' };
-    const added = passPoolOf([confirmed]);
-    this.passPool.update((pool) => {
-      const known = new Set(pool.map((pass) => pass.code));
-      return pool.concat(added.filter((pass) => !known.has(pass.code)));
-    });
-
-    this.toast.push(
-      `${guest.name} confirmó — ${1 + guest.party.length} pases QR emitidos`,
-      'ok',
-      'badgeCheck',
+    const guestsBefore = this.guests();
+    const poolBefore = this.passPool();
+    void this.persist(
+      () => this.api.patchGuest(id, { status: 'confirmed' }),
+      () => {
+        this.setGuestStatus(id, 'confirmed');
+        const confirmed: Guest = { ...guest, status: 'confirmed' };
+        const added = passPoolOf([confirmed]);
+        this.passPool.update((pool) => {
+          const known = new Set(pool.map((pass) => pass.code));
+          return pool.concat(added.filter((pass) => !known.has(pass.code)));
+        });
+      },
+      () => {
+        this.guests.set(guestsBefore);
+        this.passPool.set(poolBefore);
+      },
+      () =>
+        this.toast.push(
+          `${guest.name} confirmó — ${1 + guest.party.length} pases QR emitidos`,
+          'ok',
+          'badgeCheck',
+        ),
+      'No se pudo confirmar al invitado',
     );
   }
 
   setPhotoState(id: string, state: PhotoState): void {
     const photo = this.photos().find((p) => p.id === id);
     if (!photo || photo.state === state) return;
-    this.photos.update((list) => list.map((p) => (p.id === id ? { ...p, state } : p)));
-    this.toast.push(
-      state === 'approved'
-        ? `Foto de ${photo.author} aprobada — visible en la web del evento`
-        : `Foto de ${photo.author} rechazada — oculta para invitados`,
-      state === 'approved' ? 'ok' : 'warn',
-      state === 'approved' ? 'badgeCheck' : 'circleSlash',
+    const before = this.photos();
+    void this.persist(
+      () => this.api.patchPhoto(id, { state }),
+      () => this.photos.update((list) => list.map((p) => (p.id === id ? { ...p, state } : p))),
+      () => this.photos.set(before),
+      () =>
+        this.toast.push(
+          state === 'approved'
+            ? `Foto de ${photo.author} aprobada — visible en la web del evento`
+            : `Foto de ${photo.author} rechazada — oculta para invitados`,
+          state === 'approved' ? 'ok' : 'warn',
+          state === 'approved' ? 'badgeCheck' : 'circleSlash',
+        ),
+      'No se pudo cambiar el estado de la foto',
     );
   }
 
@@ -179,24 +253,97 @@ export class PaseStore {
     const photo = this.photos().find((p) => p.id === id);
     if (!photo) return;
     const dl = !photo.dl;
-    this.photos.update((list) => list.map((p) => (p.id === id ? { ...p, dl } : p)));
-    this.toast.push(
-      dl ? 'Descarga habilitada para los invitados' : 'Descarga deshabilitada — solo vista en web',
-      dl ? 'ok' : 'warn',
-      'download',
+    const before = this.photos();
+    void this.persist(
+      () => this.api.patchPhoto(id, { dl }),
+      () => this.photos.update((list) => list.map((p) => (p.id === id ? { ...p, dl } : p))),
+      () => this.photos.set(before),
+      () =>
+        this.toast.push(
+          dl
+            ? 'Descarga habilitada para los invitados'
+            : 'Descarga deshabilitada — solo vista en web',
+          dl ? 'ok' : 'warn',
+          'download',
+        ),
+      'No se pudo actualizar la descarga',
+    );
+  }
+
+  /**
+   * BR-13 guest soft toggle, wired to `PATCH /api/guests/:id`. The prototype
+   * admin view has no toggle control yet (UI deferred), but the store surface is
+   * API-backed and covered by specs so a future control is a one-line binding.
+   */
+  setGuestActive(id: string, active: boolean): void {
+    const before = this.guests();
+    void this.persist(
+      () => this.api.patchGuest(id, { active }),
+      () => this.guests.update((list) => list.map((g) => (g.id === id ? { ...g, active } : g))),
+      () => this.guests.set(before),
+      () =>
+        this.toast.push(
+          active ? 'Invitado reactivado' : 'Invitado desactivado',
+          active ? 'ok' : 'warn',
+          active ? 'badgeCheck' : 'circleSlash',
+        ),
+      'No se pudo actualizar el invitado',
+    );
+  }
+
+  /** BR-13 photo soft toggle, wired to `PATCH /api/photos/:id` (see setGuestActive). */
+  setPhotoActive(id: string, active: boolean): void {
+    const before = this.photos();
+    void this.persist(
+      () => this.api.patchPhoto(id, { active }),
+      () => this.photos.update((list) => list.map((p) => (p.id === id ? { ...p, active } : p))),
+      () => this.photos.set(before),
+      () =>
+        this.toast.push(
+          active ? 'Foto reactivada' : 'Foto desactivada',
+          active ? 'ok' : 'warn',
+          active ? 'badgeCheck' : 'circleSlash',
+        ),
+      'No se pudo actualizar la foto',
     );
   }
 
   /**
    * Widens the storage plan. The breakdown figures are intentionally
    * left untouched, matching the prototype — the bar can therefore read
-   * above a fifth of a freshly widened plan.
+   * above a fifth of a freshly widened plan. Stays in-memory: the storage
+   * counters are client-owned (design §3) and the API has no event PATCH
+   * endpoint yet (event writes land in PR-4).
    */
   applyPlan(eventId: string, max: number): void {
     const event = this.events().find((e) => e.id === eventId);
     if (!event) return;
     this.events.update((list) => list.map((e) => (e.id === eventId ? { ...e, max } : e)));
     this.toast.push(`Plan ampliado a ${max} GB para ${event.name}`, 'ok', 'hardDrive');
+  }
+
+  /**
+   * Applies `apply` optimistically, then issues `request`. On success the
+   * optimistic state stands (the patches are deterministic); on failure the
+   * captured `revert` restores the pre-mutation signals and a warning surfaces —
+   * so a rejected write can never leave the UI claiming a state the server did
+   * not persist.
+   */
+  private async persist(
+    request: () => Promise<unknown>,
+    apply: () => void,
+    revert: () => void,
+    success: () => void,
+    errorMessage: string,
+  ): Promise<void> {
+    apply();
+    try {
+      await request();
+      success();
+    } catch {
+      revert();
+      this.toast.push(errorMessage, 'warn', 'circleSlash');
+    }
   }
 
   guestById(id: string): Guest | undefined {

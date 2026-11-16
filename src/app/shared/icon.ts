@@ -58,7 +58,7 @@ import { PASE_ICONS, type PaseIconName } from './icons';
   styles: `
     :host {
       display: inline-flex;
-      line-height: 0
+      line-height: 0;
     }
   `,
 })

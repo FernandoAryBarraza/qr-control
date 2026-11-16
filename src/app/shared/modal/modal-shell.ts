@@ -57,7 +57,8 @@ export class ModalShell {
     afterNextRender(() => {
       if (!this.isBrowser) return;
 
-      this.restoreTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      this.restoreTarget =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
       this.previousOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
 
@@ -114,9 +115,9 @@ export class ModalShell {
   }
 
   private focusables(): HTMLElement[] {
-    return Array.from(
-      this.panel().nativeElement.querySelectorAll<HTMLElement>(FOCUSABLE),
-    ).filter((el) => el.getClientRects().length > 0);
+    return Array.from(this.panel().nativeElement.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+      (el) => el.getClientRects().length > 0,
+    );
   }
 
   private focusFirst(): void {

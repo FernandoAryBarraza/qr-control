@@ -1,8 +1,9 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 
 import { PaseStore } from '../../core/pase-store';
 import { ModalService } from '../../core/modal.service';
 import { ToastService } from '../../core/toast.service';
+import { NO_VALUE, adminContactOf } from '../../core/event-display';
 import { Icon } from '../icon';
 
 @Component({
@@ -18,9 +19,17 @@ import { Icon } from '../icon';
         </button>
       </div>
       <div class="m-body">
-        <div class="adm-line mono" style="margin-bottom:14px">PARA · {{ ev.admin.email }} · {{ ev.name.toUpperCase() }}</div>
+        <div class="adm-line mono" style="margin-bottom:14px">
+          PARA · {{ email() }} · {{ ev.name.toUpperCase() }}
+        </div>
         <label class="sr-only" for="msgTxt">Mensaje para la administradora del evento</label>
-        <textarea class="msg-area" id="msgTxt" [value]="message()" (input)="onInput($event)" placeholder="Escribe un mensaje para la administradora del evento…"></textarea>
+        <textarea
+          class="msg-area"
+          id="msgTxt"
+          [value]="message()"
+          (input)="onInput($event)"
+          placeholder="Escribe un mensaje para la administradora del evento…"
+        ></textarea>
         <div class="m-actions">
           <button type="button" class="btn" (click)="close()">Cancelar</button>
           <button type="button" class="btn solid" (click)="send()">
@@ -31,19 +40,70 @@ import { Icon } from '../icon';
     }
   `,
   styles: `
-    :host { display: block; }
-    .m-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--line); }
-    .m-title { font: 600 10.5px 'IBM Plex Mono'; letter-spacing: .2em; color: var(--soft); }
-    .ibtn { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line2); border-radius: 3px; background: transparent; transition: all .2s; }
-    .ibtn:hover { border-color: var(--ink); }
-    .adm-line { font: 500 11px 'IBM Plex Mono'; letter-spacing: .04em; color: var(--soft); margin-bottom: 5px; }
+    :host {
+      display: block;
+    }
+    .m-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+    .m-title {
+      font: 600 10.5px 'IBM Plex Mono';
+      letter-spacing: 0.2em;
+      color: var(--soft);
+    }
+    .ibtn {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line2);
+      border-radius: 3px;
+      background: transparent;
+      transition: all 0.2s;
+    }
+    .ibtn:hover {
+      border-color: var(--ink);
+    }
+    .adm-line {
+      font: 500 11px 'IBM Plex Mono';
+      letter-spacing: 0.04em;
+      color: var(--soft);
+      margin-bottom: 5px;
+    }
     /* No "outline: 0" here: it outranked the global *:focus-visible ring
        and left the only textarea in the app invisible to the keyboard. */
-    .msg-area { width: 100%; min-height: 110px; border: 1px solid var(--line2); border-radius: 3px; background: var(--paper); padding: 14px; font: 400 14px 'Space Grotesk'; color: var(--ink); resize: vertical; }
-    .msg-area:focus { border-color: var(--ink); }
-    .m-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-    .btn.solid { background: var(--ink); color: var(--cream); border-color: var(--ink); }
-    .btn.solid:hover { background: rgba(27,22,17,.92); }
+    .msg-area {
+      width: 100%;
+      min-height: 110px;
+      border: 1px solid var(--line2);
+      border-radius: 3px;
+      background: var(--paper);
+      padding: 14px;
+      font: 400 14px 'Space Grotesk';
+      color: var(--ink);
+      resize: vertical;
+    }
+    .msg-area:focus {
+      border-color: var(--ink);
+    }
+    .m-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .btn.solid {
+      background: var(--ink);
+      color: var(--cream);
+      border-color: var(--ink);
+    }
+    .btn.solid:hover {
+      background: rgba(27, 22, 17, 0.92);
+    }
   `,
 })
 export class ContactModal {
@@ -56,21 +116,46 @@ export class ContactModal {
 
   protected readonly message = signal('');
 
-  protected event() {
+  /** The event the modal is about. */
+  protected readonly event = computed(() => {
     const id = this.eventId();
     return id ? this.store.eventById(id) : undefined;
-  }
+  });
+
+  /**
+   * The administrator's contact, resolved through the client-side display
+   * mock: the API sends no address at all (the `User` model carries no
+   * email column).
+   */
+  protected readonly contact = computed(() => {
+    const event = this.event();
+    return event === undefined ? undefined : adminContactOf(event);
+  });
+
+  /** The address the provider writes to, or the em dash when there is none. */
+  protected readonly email = computed(() => this.contact()?.email ?? NO_VALUE);
 
   protected onInput(event: Event): void {
     const target = event.target as HTMLTextAreaElement;
     this.message.set(target.value);
   }
 
+  /**
+   * Sends the message and says what actually happened: with a usable address
+   * on file the toast names the real address, without one it must not claim
+   * that a message was sent to an address that does not exist.
+   */
   protected send(): void {
     const ev = this.event();
     if (!ev) return;
+    // A blank address is no address at all: it must take the warn path.
+    const address = this.contact()?.email?.trim();
     this.modals.close();
-    this.toast.push(`Mensaje enviado a ${ev.admin.email}`, 'ok', 'mailCheck');
+    if (!address) {
+      this.toast.push('No hay una dirección de correo para este evento', 'warn', 'circleSlash');
+      return;
+    }
+    this.toast.push(`Mensaje enviado a ${address}`, 'ok', 'mailCheck');
   }
 
   protected close(): void {

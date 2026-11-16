@@ -1,5 +1,12 @@
 import { isPlatformBrowser } from '@angular/common';
-import { DestroyRef, Injectable, PLATFORM_ID, afterNextRender, inject, signal } from '@angular/core';
+import {
+  DestroyRef,
+  Injectable,
+  PLATFORM_ID,
+  afterNextRender,
+  inject,
+  signal,
+} from '@angular/core';
 
 import { nowTime } from './date-format';
 import type { FeedItem, FeedResultClass } from './models';
@@ -24,11 +31,16 @@ const FEED_INTERVAL = 3600;
  * The interval lives inside `afterNextRender` and is torn down via
  * `DestroyRef`, so the Node render never spins a timer and never touches
  * a DOM node.
+ *
+ * The `DestroyRef` is resolved in the field initializer, NOT inside the
+ * `afterNextRender` callback: the callback runs outside any injection
+ * context, and `inject()` there raises NG0203.
  */
 @Injectable({ providedIn: 'root' })
 export class FeedService {
   private readonly store = inject(PaseStore);
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly destroyRef = inject(DestroyRef);
   private nextId = 0;
 
   readonly items = signal<readonly FeedItem[]>([]);
@@ -38,7 +50,7 @@ export class FeedService {
     afterNextRender(() => {
       if (!this.isBrowser) return;
       const timer = setInterval(() => this.tick(), FEED_INTERVAL);
-      inject(DestroyRef).onDestroy(() => clearInterval(timer));
+      this.destroyRef.onDestroy(() => clearInterval(timer));
     });
   }
 
@@ -60,7 +72,11 @@ export class FeedService {
 
     const roll = Math.random();
     const [label, cls]: readonly [string, FeedResultClass] =
-      roll < 0.86 ? ['VÁLIDO', 'fx-ok'] : roll < 0.96 ? ['RE-INGRESO', 'fx-warn'] : ['PASE DUPLICADO', 'fx-bad'];
+      roll < 0.86
+        ? ['VÁLIDO', 'fx-ok']
+        : roll < 0.96
+          ? ['RE-INGRESO', 'fx-warn']
+          : ['PASE DUPLICADO', 'fx-bad'];
 
     const item: FeedItem = {
       id: ++this.nextId,

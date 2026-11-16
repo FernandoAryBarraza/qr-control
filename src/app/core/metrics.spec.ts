@@ -13,9 +13,14 @@ import {
   photoFilters,
   segmentWidth,
   statDefs,
+  storageBarClass,
+  storageBarWidth,
+  storageLine,
+  storageUsage,
   storageWidth,
 } from './metrics';
-import type { Guest, Metrics } from './models';
+import type { Guest, Metrics, PaseEvent } from './models';
+import { NO_VALUE, resolvedGuards, storageOf, storageTotals } from './event-display';
 
 /**
  * `metrics.ts` is pure derivation — no DOM, no signals, no `Intl`, no
@@ -47,6 +52,26 @@ function guest(over: Partial<Guest> = {}): Guest {
   };
 }
 
+/**
+ * An event payload exactly as the API sends it: the storage counters are
+ * gone (they are not stored — design §3), and so are the countdown, the
+ * admin contact details and the guard details. Every figure the provider
+ * view shows has to come from the client's own display mock.
+ */
+function payload(over: Partial<PaseEvent> = {}): PaseEvent {
+  return {
+    id: 'ev1',
+    status: 'active',
+    name: 'Gala Aniversario Valdemar',
+    dateLabel: '14 JUN 2025 · 20:00',
+    guests: 218,
+    photos: 96,
+    admin: { name: 'Mariana Solórzano' },
+    security: [],
+    ...over,
+  };
+}
+
 describe('computeMetrics', () => {
   it('reproduces the seed figures the prototype renders', () => {
     expect(metrics).toEqual({
@@ -63,9 +88,9 @@ describe('computeMetrics', () => {
   });
 
   it('splits every guest into exactly one of the four statuses', () => {
-    expect(metrics.confirmed + metrics.declined + metrics.sentPend + (metrics.planned - metrics.invited)).toBe(
-      metrics.planned,
-    );
+    expect(
+      metrics.confirmed + metrics.declined + metrics.sentPend + (metrics.planned - metrics.invited),
+    ).toBe(metrics.planned);
   });
 
   it('derives sentPend from the others instead of counting the list', () => {
@@ -80,7 +105,10 @@ describe('computeMetrics', () => {
   });
 
   it('counts companions of confirmed guests in comp, but of everyone in compPrev', () => {
-    const confirmedParty = GUESTS.filter((x) => x.status === 'confirmed').reduce((a, x) => a + x.party.length, 0);
+    const confirmedParty = GUESTS.filter((x) => x.status === 'confirmed').reduce(
+      (a, x) => a + x.party.length,
+      0,
+    );
     const allParty = GUESTS.reduce((a, x) => a + x.party.length, 0);
 
     expect(metrics.comp).toBe(confirmedParty);
@@ -153,7 +181,12 @@ describe('funnelSegments', () => {
       guest({ status: 'confirmed' }),
     ]);
 
-    expect(funnelSegments(allConfirmed).map((s) => s.width)).toEqual(['100.00%', '0.00%', '0.00%', '0.00%']);
+    expect(funnelSegments(allConfirmed).map((s) => s.width)).toEqual([
+      '100.00%',
+      '0.00%',
+      '0.00%',
+      '0.00%',
+    ]);
     expect(segmentWidth(1.5)).toBe('150.00%'); // prototype quirk, preserved
   });
 });
@@ -198,7 +231,9 @@ describe('statDefs', () => {
   });
 
   it('clamps the companions ratio at 100% even when more show up than expected', () => {
-    const defs = statDefs(computeMetrics([guest({ status: 'confirmed', party: [{ name: 'A', rel: 'X' }] })]));
+    const defs = statDefs(
+      computeMetrics([guest({ status: 'confirmed', party: [{ name: 'A', rel: 'X' }] })]),
+    );
 
     // comp 1 of compPrev 1 -> 100%, and the first tile is always full.
     expect(defs[3].barWidth).toBe('100.0%');
@@ -417,8 +452,10 @@ describe('kpis', () => {
 
   it('totals storage across every event, not just the active one', () => {
     const total = kpis(EVENTS)[3];
-    const used = EVENTS.reduce((a, e) => a + e.used, 0);
-    const max = EVENTS.reduce((a, e) => a + e.max, 0);
+    const totals = storageTotals(EVENTS);
+    expect(totals).toBeDefined();
+    const used = totals?.used ?? 0;
+    const max = totals?.max ?? 0;
 
     // Float addition, so the sum is not exactly 51.4 — `gb` is what rounds it.
     expect(used).toBeCloseTo(51.4, 10);
@@ -429,24 +466,91 @@ describe('kpis', () => {
     expect(total.subBold).toBe(`${Math.round((used / max) * 100)}% EN USO`);
   });
 
-  it('counts only guards whose app is online', () => {
+  it('takes the storage figures from the client-side mock, not from the payload', () => {
+    // The API sends no counters at all, so the KPI has to read the mock.
+    const total = kpis([payload()])[3];
+
+    expect(total.value).toBe('12.4');
+    expect(total.unit).toBe('GB');
+    expect(total.subPrefix).toBe('DE 50 GB CONTRATADOS · ');
+    expect(total.subBold).toBe('25% EN USO');
+  });
+
+  it('counts the RESOLVED app states — the prototype reads 3 of 9', () => {
+    // The API sends no app state at all (the scanner service does not exist
+    // yet), so the KPI has to read the client-side display mock — not the
+    // raw payload, which carries nothing to count.
     const online = EVENTS.reduce(
-      (a, e) => a + e.security.filter((s) => s.app === 'online').length,
+      (a, e) => a + resolvedGuards(e).filter((guard) => guard.app === 'online').length,
       0,
     );
     const guards = EVENTS.reduce((a, e) => a + e.security.length, 0);
 
     expect(online).toBe(3);
     expect(guards).toBe(9);
-    expect(defs[2].value).toBe(String(online));
-    expect(defs[2].unit).toBe(`/ ${guards}`);
+    expect(defs[2].value).toBe('3');
+    expect(defs[2].unit).toBe('/ 9');
+  });
+
+  it('degrades honestly for an event the prototype never had', () => {
+    const event = payload({ id: 'ev-404', security: [{ name: 'Guardia Desconocida' }] });
+
+    // No fixture: the guard has no post and no scanner app — the KPI must
+    // not invent an online scanner to fill the tile.
+    expect(resolvedGuards(event)).toEqual([
+      { name: 'Guardia Desconocida', post: NO_VALUE, app: 'none', last: null },
+    ]);
+
+    const degraded = kpis([event])[2];
+    expect(degraded.value).toBe('0');
+    expect(degraded.unit).toBe('/ 1');
   });
 
   it('renders four tiles even with no events, without dividing by zero', () => {
     const empty = kpis([]);
 
     expect(empty).toHaveLength(4);
-    expect(empty[3].value).toBe('0.0');
-    expect(empty[3].subBold).toBe('NaN% EN USO'); // preserved prototype behaviour
+    // No contract, no figures: the em dash, never `NaN`.
+    expect(empty[3].value).toBe(NO_VALUE);
+    expect(empty[3].unit).toBe('');
+    expect(empty[3].subPrefix).toBe('');
+    expect(empty[3].subBold).toBe('');
+  });
+
+  it('renders the em dash for an event without a storage contract', () => {
+    const total = kpis([payload({ id: 'ev-404' })])[3];
+
+    expect(total.value).toBe(NO_VALUE);
+    expect(total.unit).toBe('');
+    expect(total.subPrefix).toBe('');
+    expect(total.subBold).toBe('');
+  });
+});
+
+describe('storage formatters', () => {
+  it('formats the figures of an event with a contract', () => {
+    const storage = storageOf(payload());
+
+    expect(storageLine(storage)).toBe('12.4 / 50 GB');
+    expect(storageUsage(storage)).toBe('12.4 GB DE 50 GB');
+    expect(storageBarWidth(storage)).toBe('24.8%');
+    expect(storageBarClass(storage)).toBe('');
+  });
+
+  it('formats the em dash for an event without a contract', () => {
+    const storage = storageOf(payload({ id: 'ev-404' }));
+
+    expect(storage).toBeUndefined();
+    expect(storageLine(storage)).toBe(NO_VALUE);
+    expect(storageUsage(storage)).toBe(NO_VALUE);
+    expect(storageBarWidth(storage)).toBe('0%');
+    expect(storageBarClass(storage)).toBe('');
+  });
+
+  it('never lets a non-finite figure reach the screen', () => {
+    expect(gb(Number.NaN)).toBe(NO_VALUE);
+    expect(gb(Number.POSITIVE_INFINITY)).toBe(NO_VALUE);
+    expect(storageWidth(12.4, 0)).toBe('0%');
+    expect(barClass(12.4, 0)).toBe('');
   });
 });

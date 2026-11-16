@@ -10,17 +10,24 @@ import type {
   PhotoState,
   StatTileDef,
 } from './models';
+import { NO_VALUE, resolvedGuards, storageTotals } from './event-display';
+import type { StorageFixture, StorageTotals } from './event-display';
 
 /**
  * Pure derivation of every figure the UI shows. No DOM, no signals, no
  * randomness — a unit test can call these directly with the seed data.
  *
  * Formulas are copied verbatim from `QR_Z_Open/app.js:218-271, 601-626`.
+ * The exceptions are spelled out in the doc comments below.
  */
 
-/** Prototype `gb()` — one decimal, always. */
+/**
+ * Prototype `gb()` — one decimal, always. A figure that is not a finite
+ * number never reaches the screen: it renders as the em dash, so no surface
+ * can show `NaN`.
+ */
 export function gb(value: number): string {
-  return value.toFixed(1);
+  return Number.isFinite(value) ? value.toFixed(1) : NO_VALUE;
 }
 
 /**
@@ -41,15 +48,58 @@ export function barWidth(ratio: number): string {
   return Math.min(100, ratio * 100).toFixed(1) + '%';
 }
 
-/** Event storage bar (`app.js:641`): clamped, no fixed precision. */
+/**
+ * Event storage bar (`app.js:641`): clamped, no fixed precision.
+ *
+ * DEVIATION from the prototype, which divides unguarded
+ * (`Math.min(100, e.used / e.max * 100)`, `app.js:641`): with `max` of 0
+ * the width is `NaN%` — or a full bar when `used` is not 0. The storage
+ * counters are not stored (design §3), so an event without a contract
+ * reaches this with no figures; `max <= 0` renders an empty bar (`0%`)
+ * instead of `NaN`/`Infinity`.
+ */
 export function storageWidth(used: number, max: number): string {
+  if (!(max > 0)) return '0%';
   return Math.min(100, (used / max) * 100) + '%';
 }
 
-/** Threshold colouring of the provider storage bars (`app.js:626`). */
+/**
+ * Threshold colouring of the provider storage bars (`app.js:626`).
+ *
+ * DEVIATION from the prototype, which computes `e.used / e.max` unguarded:
+ * an event without a contract would divide by zero and paint its bar `bad`
+ * (red) — or leave it uncoloured when the ratio is `NaN`. `max <= 0`
+ * therefore returns no modifier.
+ */
 export function barClass(used: number, max: number): '' | 'warn' | 'bad' {
+  if (!(max > 0)) return '';
   const ratio = used / max;
   return ratio > 0.85 ? 'bad' : ratio > 0.65 ? 'warn' : '';
+}
+
+/** The used/max figures of an event: "12.4 / 50 GB", or the em dash. */
+export function storageLine(storage: StorageFixture | undefined): string {
+  return storage === undefined ? NO_VALUE : `${gb(storage.used)} / ${storage.max} GB`;
+}
+
+/** The usage line of the storage modal: "12.4 GB DE 50 GB", or the em dash. */
+export function storageUsage(storage: StorageFixture | undefined): string {
+  return storage === undefined ? NO_VALUE : `${gb(storage.used)} GB DE ${storage.max} GB`;
+}
+
+/** The width of an event's storage bar: "24.8%", or "0%" without a contract. */
+export function storageBarWidth(storage: StorageFixture | undefined): string {
+  return storage === undefined ? '0%' : storageWidth(storage.used, storage.max);
+}
+
+/** The threshold class of an event's storage bar. */
+export function storageBarClass(storage: StorageFixture | undefined): '' | 'warn' | 'bad' {
+  return storage === undefined ? '' : barClass(storage.used, storage.max);
+}
+
+/** The share of the contracted storage in use, as whole percent. */
+export function usedPercent(totals: StorageTotals): number {
+  return totals.max > 0 ? Math.round((totals.used / totals.max) * 100) : 0;
 }
 
 export function computeMetrics(guests: readonly Guest[]): Metrics {
@@ -134,10 +184,12 @@ export function statDefs(metrics: Metrics): StatTileDef[] {
  */
 export function passPoolOf(guests: readonly Guest[]): Pass[] {
   const pool: Pass[] = [];
-  guests.filter((g) => g.status === 'confirmed').forEach((g) => {
-    pool.push({ code: g.id, name: g.name });
-    g.party.forEach((p, i) => pool.push({ code: `${g.id}·A${i + 1}`, name: p.name }));
-  });
+  guests
+    .filter((g) => g.status === 'confirmed')
+    .forEach((g) => {
+      pool.push({ code: g.id, name: g.name });
+      g.party.forEach((p, i) => pool.push({ code: `${g.id}·A${i + 1}`, name: p.name }));
+    });
   return pool;
 }
 
@@ -181,10 +233,19 @@ export function eventFilters(events: readonly PaseEvent[]): FilterOption[] {
 }
 
 export function kpis(events: readonly PaseEvent[]): KpiDef[] {
-  const online = events.reduce((a, e) => a + e.security.filter((s) => s.app === 'online').length, 0);
+  // The scanner app state is display-only and the API sends none of it (the
+  // scanner service does not exist yet), so the count comes from the
+  // client-side display mock — resolved guard by guard, never from the raw
+  // payload, which carries nothing to count.
+  const online = events.reduce(
+    (a, e) => a + resolvedGuards(e).filter((guard) => guard.app === 'online').length,
+    0,
+  );
   const guards = events.reduce((a, e) => a + e.security.length, 0);
-  const used = events.reduce((a, e) => a + e.used, 0);
-  const max = events.reduce((a, e) => a + e.max, 0);
+  // The storage figures come from the client's own display mock — the API
+  // sends none (they are not stored, design §3). Without a contract the
+  // tile shows the em dash, never `NaN`.
+  const totals = storageTotals(events);
   return [
     {
       label: 'EVENTOS ACTIVOS',
@@ -215,11 +276,11 @@ export function kpis(events: readonly PaseEvent[]): KpiDef[] {
     },
     {
       label: 'ALMACENAMIENTO EN NUBE',
-      value: gb(used),
-      unit: 'GB',
+      value: totals === undefined ? NO_VALUE : gb(totals.used),
+      unit: totals === undefined ? '' : 'GB',
       sub: '',
-      subPrefix: `DE ${max} GB CONTRATADOS · `,
-      subBold: `${Math.round((used / max) * 100)}% EN USO`,
+      subPrefix: totals === undefined ? '' : `DE ${totals.max} GB CONTRATADOS · `,
+      subBold: totals === undefined ? '' : `${usedPercent(totals)}% EN USO`,
       flexGrow: 1.3,
     },
   ];

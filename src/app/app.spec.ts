@@ -1,3 +1,5 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { App } from './app';
@@ -6,6 +8,9 @@ describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
+      // PaseStore depends on DataApiService → HttpClient; the root component
+      // test never talks to a real backend (PR-1d).
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
   });
 

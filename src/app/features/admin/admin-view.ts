@@ -80,6 +80,10 @@ export class AdminView {
   protected handleOpenLightbox(photoId: string): void {
     const photos = this.store.visiblePhotos();
     const idx = photos.findIndex((p) => p.id === photoId);
-    this.modals.open({ kind: 'lightbox', photoList: photos.map((p) => p.id), photoIndex: idx >= 0 ? idx : 0 });
+    this.modals.open({
+      kind: 'lightbox',
+      photoList: photos.map((p) => p.id),
+      photoIndex: idx >= 0 ? idx : 0,
+    });
   }
 }

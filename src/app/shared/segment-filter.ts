@@ -8,6 +8,15 @@ export interface SegmentFilterOption {
 
 @Component({
   selector: 'app-segment-filter',
+  // The label lives in its own `<span>` so the `@if` badge is not an inline
+  // sibling of the interpolation's text node. Angular keeps the whitespace
+  // that trails an interpolated text node whose next sibling is a block
+  // (`WhitespaceVisitor.visitText` only trims first/last tokens), so writing
+  // `{{ option.label }}` directly ahead of `@if` renders an extra space
+  // ("TODOS 14") as soon as the template is reflowed onto its own lines.
+  // Wrapping it makes the gap between label and badge a whitespace-only text
+  // node, which Angular drops outright, leaving `.segf button sup`'s
+  // `margin-left: 4px` (QR_Z_Open/style.css:664-668) as the only spacing.
   template: `
     <div
       class="segf"
@@ -25,7 +34,10 @@ export interface SegmentFilterOption {
           [class.active]="option.value === value()"
           (click)="select(option)"
         >
-          {{ option.label }}@if (showCount(option)) {<sup>{{ option.count }}</sup>}
+          <span>{{ option.label }}</span>
+          @if (showCount(option)) {
+            <sup>{{ option.count }}</sup>
+          }
         </button>
       }
     </div>

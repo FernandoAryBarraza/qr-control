@@ -1,0 +1,4 @@
+{
+  "//": "ESM marker for tsx: prisma/seed.ts uses import.meta + top-level await, and the repo root has no \"type\": \"module\". Prisma CLI ignores this file.",
+  "type": "module"
+}

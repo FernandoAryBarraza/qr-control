@@ -1,46 +1,56 @@
 .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    gap: 28px;
-    padding: 14px 40px;
-    border-bottom: 1px solid var(--line2);
-    background: rgba(243, 239, 230, .88);
-    backdrop-filter: blur(10px)
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 14px 40px;
+  border-bottom: 1px solid var(--line2);
+  background: rgba(243, 239, 230, 0.88);
+  backdrop-filter: blur(10px);
 }
 
 .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .brand-mark {
-    width: 38px;
-    height: 38px;
-    background: var(--ink);
-    color: var(--cream);
-    display: grid;
-    place-items: center;
-    font: italic 600 20px 'Fraunces';
-    border-radius: 3px
+  width: 38px;
+  height: 38px;
+  background: var(--ink);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  font: italic 600 20px 'Fraunces';
+  border-radius: 3px;
 }
 
 .brand-name {
-    font: 600 17px 'Space Grotesk';
-    letter-spacing: .22em
+  font: 600 17px 'Space Grotesk';
+  letter-spacing: 0.22em;
 }
 
 .brand-sub {
-    font: 500 8.5px 'IBM Plex Mono';
-    letter-spacing: .2em;
-    color: var(--soft)
+  font: 500 8.5px 'IBM Plex Mono';
+  letter-spacing: 0.2em;
+  color: var(--soft);
 }
 
 .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 22px
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+/* Prototype 920 block (QR_Z_Open/style.css:2164-2168). flex-wrap is handled
+   globally in src/styles.css; gap/padding are enforced here because this
+   selector is component-scoped. */
+@media (max-width: 920px) {
+  .topbar {
+    gap: 14px;
+    padding: 12px 20px;
+  }
 }

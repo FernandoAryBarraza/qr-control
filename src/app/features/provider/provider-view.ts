@@ -21,7 +21,12 @@ import { EventList } from './event-list';
             <span class="sec-label">NÉBULA EVENTS · PANEL DE PROVEEDOR DEL SERVICIO</span>
             <h1>Eventos bajo <em>gestión</em></h1>
           </div>
-          <button type="button" class="btn" style="border-color:var(--cream-line);color:var(--cream)" (click)="newEvent()">
+          <button
+            type="button"
+            class="btn"
+            style="border-color:var(--cream-line);color:var(--cream)"
+            (click)="newEvent()"
+          >
             <app-icon name="plus" [size]="12" />Alta de evento
           </button>
         </div>
@@ -49,14 +54,24 @@ import { EventList } from './event-list';
           <div class="scan-head">
             <span class="sec-label">ACTIVIDAD DE ESCÁNERES</span>
             <span class="live-flag"><span class="dot"></span>EN VIVO</span>
-            <button type="button" class="ibtn" (click)="toggleFeed()" [title]="feed.paused() ? 'Reanudar feed' : 'Pausar feed'">
+            <button
+              type="button"
+              class="ibtn"
+              (click)="toggleFeed()"
+              [title]="feed.paused() ? 'Reanudar feed' : 'Pausar feed'"
+            >
               <app-icon [name]="feed.paused() ? 'play' : 'pause'" [size]="12" />
               <span class="sr-only">{{ feed.paused() ? 'Reanudar feed' : 'Pausar feed' }}</span>
             </button>
           </div>
           <div class="feed">
             @for (item of feed.items(); track item.id) {
-              <div class="feed-item" [class.fx-ok]="item.result.cls === 'fx-ok'" [class.fx-warn]="item.result.cls === 'fx-warn'" [class.fx-bad]="item.result.cls === 'fx-bad'">
+              <div
+                class="feed-item"
+                [class.fx-ok]="item.result.cls === 'fx-ok'"
+                [class.fx-warn]="item.result.cls === 'fx-warn'"
+                [class.fx-bad]="item.result.cls === 'fx-bad'"
+              >
                 <span class="ft">{{ item.time }}</span>
                 <div>
                   <span class="fcode">{{ item.code }}</span>
@@ -73,22 +88,39 @@ import { EventList } from './event-list';
     </div>
   `,
   styles: `
-    :host { display: block; }
-    .segfilter-wrap { display: block; margin-bottom: 16px; }
-    .segfilter-wrap .segf { display: flex; gap: 2px; }
+    :host {
+      display: block;
+    }
+    .segfilter-wrap {
+      display: block;
+      margin-bottom: 16px;
+    }
+    .segfilter-wrap .segf {
+      display: flex;
+      gap: 2px;
+    }
     .segfilter-wrap .segf button {
       border: 0;
       background: transparent;
       padding: 7px 11px 9px;
       font: 600 9.5px 'IBM Plex Mono';
-      letter-spacing: .12em;
+      letter-spacing: 0.12em;
       color: var(--soft);
       border-bottom: 2px solid transparent;
-      transition: all .2s;
+      transition: all 0.2s;
     }
-    .segfilter-wrap .segf button:hover { color: var(--ink); }
-    .segfilter-wrap .segf button.active { color: var(--ink); border-bottom-color: var(--ink); }
-    .segfilter-wrap .segf button sup { font-size: 8px; margin-left: 4px; color: var(--accent); }
+    .segfilter-wrap .segf button:hover {
+      color: var(--ink);
+    }
+    .segfilter-wrap .segf button.active {
+      color: var(--ink);
+      border-bottom-color: var(--ink);
+    }
+    .segfilter-wrap .segf button sup {
+      font-size: 8px;
+      margin-left: 4px;
+      color: var(--accent);
+    }
   `,
 })
 export class ProviderView {

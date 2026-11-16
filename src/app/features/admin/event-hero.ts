@@ -100,6 +100,18 @@ import { Icon } from '../../shared/icon';
       flex-shrink: 0;
       padding-bottom: 6px;
     }
+
+    /* Prototype 920 block (QR_Z_Open/style.css:2104-2110). Enforced here, not
+       globally, because these selectors are component-scoped. */
+    @media (max-width: 920px) {
+      .event-hero {
+        align-items: flex-start;
+      }
+
+      .event-title {
+        font-size: 42px;
+      }
+    }
   `,
   imports: [Icon],
 })

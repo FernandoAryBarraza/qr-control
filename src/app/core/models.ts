@@ -20,6 +20,11 @@ export interface Guest {
   readonly table: number;
   readonly party: readonly PartyMember[];
   readonly note: string;
+  /**
+   * BR-13 soft toggle. Optional because the bundled fixtures predate it; the
+   * API always sends the persisted value on guest writes and reads.
+   */
+  readonly active?: boolean;
 }
 
 /** A single scannable credential. Code for companions is `P-001·A1`. */
@@ -42,6 +47,8 @@ export interface EventPhoto {
   readonly time: string;
   readonly url: string;
   readonly big: string;
+  /** BR-13 soft-toggle flag — the API always sends the persisted value; optional for fixtures. */
+  readonly active?: boolean;
 }
 
 export type EventStatus = 'active' | 'upcoming' | 'done';
@@ -51,21 +58,33 @@ export type ScanAppState = 'online' | 'idle' | 'none' | 'archived';
 
 export interface SecurityGuard {
   readonly name: string;
-  readonly post: string;
-  readonly app: ScanAppState;
-  readonly last: string | null;
+  /**
+   * Scanner details — display-only and NOT part of the API contract: the
+   * scanner service does not exist yet and the assignment rows carry no
+   * post, app state or last sync, so the server sends none of them. The
+   * client resolves them from its own display mock (`event-display.ts`).
+   */
+  readonly post?: string;
+  readonly app?: ScanAppState;
+  readonly last?: string | null;
 }
 
 export interface EventAdmin {
   readonly name: string;
-  readonly email: string;
-  readonly phone: string;
-  readonly since: string;
+  /**
+   * Contact details — display-only and NOT part of the API contract: the
+   * `User` model carries no email or phone, so the server sends none of
+   * them. The client resolves them from its own display mock
+   * (`event-display.ts`).
+   */
+  readonly email?: string;
+  readonly phone?: string;
+  readonly since?: string;
 }
 
 export interface StorageBreakdown {
   readonly FOTOS: number;
-  readonly 'VÍDEOS': number;
+  readonly VÍDEOS: number;
   readonly OTROS: number;
 }
 
@@ -74,12 +93,24 @@ export interface PaseEvent {
   readonly status: EventStatus;
   readonly name: string;
   readonly dateLabel: string;
-  readonly cd: string | null;
+  /**
+   * Countdown badge ("EN 42 DÍAS") — display-only and NOT part of the API
+   * contract: the countdown is not stored, so the server sends none. The
+   * client resolves it from its own display mock (`event-display.ts`).
+   */
+  readonly cd?: string | null;
   readonly guests: number;
   readonly photos: number;
-  readonly used: number;
-  readonly max: number;
-  readonly br: StorageBreakdown;
+  /**
+   * Storage figures — display-only and NOT part of the API contract: the
+   * counters are not stored (design §3) and the storage service does not
+   * exist yet, so the server sends neither. The client resolves them from
+   * its own display mock (`event-display.ts`); `max` is the exception,
+   * because applying a plan writes it back onto the event.
+   */
+  readonly used?: number;
+  readonly max?: number;
+  readonly br?: StorageBreakdown;
   readonly note?: string;
   readonly admin: EventAdmin;
   readonly security: readonly SecurityGuard[];

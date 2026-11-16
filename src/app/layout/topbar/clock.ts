@@ -1,12 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import {
-  Component,
-  DestroyRef,
-  PLATFORM_ID,
-  afterNextRender,
-  inject,
-  signal,
-} from '@angular/core';
+import { Component, DestroyRef, PLATFORM_ID, afterNextRender, inject, signal } from '@angular/core';
 
 import { clockLabel } from '../../core/date-format';
 
@@ -28,13 +21,13 @@ import { clockLabel } from '../../core/date-format';
   host: { 'aria-hidden': 'true' },
   styles: `
     :host {
-      display: inline-flex
+      display: inline-flex;
     }
 
     .clock {
       font: 500 11.5px 'IBM Plex Mono';
-      letter-spacing: .08em;
-      color: var(--soft)
+      letter-spacing: 0.08em;
+      color: var(--soft);
     }
   `,
 })

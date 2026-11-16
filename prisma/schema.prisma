@@ -1,0 +1,142 @@
+// Persistence schema for qr_control — see openspec/changes/persistence-prisma-sqlite/design.md §3.
+//
+// Portability guardrails (spec req 16 / BR-18):
+// - String status columns only — NO Prisma enums; validation happens at the app layer.
+// - onDelete: Cascade everywhere event-scoped so provider purge = one Event delete (BR-12).
+// - User rows are NEVER deleted (assignments/references restrict or cascade per design §3).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String  @id
+  name      String
+  role      String // provider | admin | security — app-layer validated
+  events    EventAssignment[]
+  requested AdminRequest[]   @relation("requestedBy")
+}
+
+model Event {
+  id            String          @id
+  name          String
+  status        String // upcoming | active | finished
+  start         DateTime // QR validity window only (BR-09/BR-14)
+  end           DateTime
+  retentionDays Int             @default(365) // BR-15 policy metadata, provider-set (BR-15)
+  note          String?
+  assignments   EventAssignment[]
+  guests        Guest[]
+  photos        Photo[]
+  checkIns      CheckIn[]
+  qrs           QrToken[]
+  adminRequests AdminRequest[]
+}
+
+// Explicit join: users ↔ events, ≥1 admin per event (design §3).
+model EventAssignment {
+  eventId String
+  userId  String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@id([eventId, userId])
+  @@index([userId])
+}
+
+model Guest {
+  id         String      @id
+  eventId    String
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name       String
+  email      String
+  phone      String
+  table      Int
+  note       String
+  status     String // planned | sent | confirmed | declined
+  active     Boolean     @default(true) // BR-13 admin soft toggle
+  companions Companion[]
+  photos     Photo[]
+  qrs        QrToken[]
+  @@index([eventId])
+}
+
+model Companion {
+  id      String    @id
+  guestId String
+  guest   Guest     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  name    String
+  rel     String
+  active  Boolean   @default(true)
+  qrs     QrToken[]
+  @@index([guestId])
+}
+
+// BR-16: metadata + external URL only, no image bytes in SQLite.
+model Photo {
+  id            String   @id
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  url           String // opaque external reference (storage-vendor swappable)
+  bigUrl        String?
+  state         String // pending | approved | rejected
+  downloaded    Boolean // legacy `dl`
+  sizeKb        Int?
+  height        Int?
+  time          DateTime
+  authorName    String // display name — matches current behavior + seed data
+  authorGuestId String? // nullable FK for future upload-flow linking (deferred)
+  authorGuest   Guest?   @relation(fields: [authorGuestId], references: [id], onDelete: SetNull)
+  active        Boolean  @default(true)
+  @@index([eventId])
+}
+
+// BR-07..BR-11, BR-17: opaque server-issued tokens, stored as SHA-256 hashes.
+model QrToken {
+  id           String     @id
+  tokenHash    String     @unique // SHA-256 of the raw token; raw returned once at issuance
+  eventId      String
+  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind         String // guest | companion | emergency
+  guestId      String?
+  guest        Guest?     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  companionId  String?
+  companion    Companion? @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  parentQrId   String? // companion QR → owning guest QR (BR-07 linkage)
+  issuedAt     DateTime   @default(now())
+  consumedAt   DateTime? // single-use marker (BR-08)
+  @@index([eventId])
+}
+
+model CheckIn {
+  id        String   @id
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  qrId      String   @unique // 1 check-in per consumed QR (BR-08)
+  createdAt DateTime @default(now())
+  active    Boolean  @default(true) // BR-13
+  @@index([eventId])
+}
+
+// BR-05 workflow — status is exactly pending | approved | rejected (app-layer validated).
+model AdminRequest {
+  id              String   @id
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  candidateUserId String
+  requestedById   String
+  requestedBy     User?    @relation("requestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  status          String   @default("pending")
+  decidedAt       DateTime?
+  @@index([eventId, status])
+}
+
+// BR-18: provider/seed-origin marker (design §9).
+model SystemSetting {
+  key   String @id
+  value String
+}
