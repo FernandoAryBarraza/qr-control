@@ -13,6 +13,7 @@ import {
   existingAdminIds,
   findEvent,
   listEvents,
+  updateEventPolicy,
 } from '../data/repositories/events';
 import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repositories/guests';
 import { createSecurityMember, listMembers } from '../data/repositories/members';
@@ -26,6 +27,7 @@ import {
   canDecideAdminRequest,
   canReadEvent,
   canReadQrImage,
+  canUpdateEventPolicy,
   canVerifyQr,
   canWriteObject,
   resolveEventScope,
@@ -37,6 +39,7 @@ import {
   parseAdminRequestPatch,
   parseCheckInInput,
   parseEventInput,
+  parseEventPatch,
   parseGuestInput,
   parseGuestPatch,
   parseMemberInput,
@@ -204,6 +207,30 @@ apiRouter.get('/events/:id', callerContext, eventAccess('event'), async (req, re
     return;
   }
   res.json(event);
+});
+
+// PATCH /api/events/:id — provider-only POLICY write (design §5 / BR-14, BR-15):
+// retention and lifecycle status are the two provider-owned event fields, and the
+// ROLE check runs before the payload so an admin gets the same refusal whether the
+// body is valid or not (spec req 3 — no validation oracle). Content writes stay
+// with the event's own admin; only the provider sets the policy.
+apiRouter.patch('/events/:id', callerContext, async (req, res) => {
+  const caller = callerOf(res);
+  if (!canUpdateEventPolicy(caller)) {
+    forbidden(res);
+    return;
+  }
+  const parsed = parseEventPatch(req.body);
+  if (!parsed.ok) {
+    badRequest(res);
+    return;
+  }
+  const updated = await updateEventPolicy(pathId(req), parsed.value);
+  if (updated === null) {
+    res.status(404).json({ statusCode: 404, message: 'Not Found' });
+    return;
+  }
+  res.json(updated);
 });
 
 // GET /api/events/:id/guests — provider any; assigned admin (design §5).

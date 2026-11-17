@@ -109,3 +109,40 @@ export async function createEvent(input: EventWriteInput): Promise<PaseEvent> {
   });
   return toPaseEvent(event);
 }
+
+/** PATCH /api/events/:id write contract — the two provider-owned event fields. */
+export interface EventPatchInput {
+  readonly retentionDays?: number;
+  readonly status?: string;
+}
+
+/**
+ * The PATCH response: the normal read shape plus `retentionDays`, the policy
+ * field this route owns (BR-15). The list/detail GETs keep their current shape —
+ * retention is not part of the client's display contract yet, so it is returned
+ * where it is written instead of leaking into every read.
+ */
+export interface EventPolicy extends PaseEvent {
+  readonly retentionDays: number;
+}
+
+/**
+ * Applies a provider policy patch (BR-14/BR-15 + lifecycle status) and returns
+ * the updated read shape. `null` means the id does not exist, so the route can
+ * answer 404 without ever echoing row contents (spec req 3).
+ */
+export async function updateEventPolicy(
+  id: string,
+  input: EventPatchInput,
+): Promise<EventPolicy | null> {
+  const data = {
+    ...(input.retentionDays === undefined ? {} : { retentionDays: input.retentionDays }),
+    ...(input.status === undefined ? {} : { status: input.status }),
+  };
+  return getPrisma().$transaction(async (tx) => {
+    const { count } = await tx.event.updateMany({ where: { id }, data });
+    if (count === 0) return null;
+    const row = await tx.event.findUniqueOrThrow({ where: { id }, include: EVENT_INCLUDE });
+    return { ...toPaseEvent(row), retentionDays: row.retentionDays };
+  });
+}
