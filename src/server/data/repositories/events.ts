@@ -146,3 +146,21 @@ export async function updateEventPolicy(
     return { ...toPaseEvent(row), retentionDays: row.retentionDays };
   });
 }
+
+export type PurgeOutcome = 'deleted' | 'not_found' | 'not_finished';
+
+/**
+ * BR-12: deletes a FINISHED event; Prisma's onDelete: Cascade removes every
+ * event-scoped row (guests, companions, photos, check-ins, QRs, admin requests,
+ * assignments) while `User` rows survive. The status gate lives in the DELETE
+ * predicate itself, so a concurrent policy patch cannot slip a non-finished
+ * event through a check-then-delete race.
+ */
+export async function purgeEvent(id: string): Promise<PurgeOutcome> {
+  return getPrisma().$transaction(async (tx) => {
+    const { count } = await tx.event.deleteMany({ where: { id, status: 'finished' } });
+    if (count > 0) return 'deleted';
+    const row = await tx.event.findUnique({ where: { id }, select: { id: true } });
+    return row === null ? 'not_found' : 'not_finished';
+  });
+}

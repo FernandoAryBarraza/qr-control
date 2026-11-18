@@ -25,10 +25,9 @@ function request(
   });
 }
 
-// Structural check for BR-13 (spec req 11, scenario 3): an admin delete can only
-// happen through a registered DELETE route. PR-3 may add the provider-only
-// `DELETE /api/events/:id` (BR-12); until then NO delete route may exist at all,
-// and no admin may ever reach one.
+// Structural check for BR-13 (spec req 11, scenario 3): the ONLY registered
+// DELETE route is the provider-only event purge (BR-12). No row-addressed delete
+// route may exist, and no admin/security caller may reach the purge.
 function registeredDeleteRoutes(): string[] {
   type RouteLayer = { route?: { path: string; methods: Record<string, boolean> } };
   const layers = (apiRouter as unknown as { stack: RouteLayer[] }).stack;
@@ -132,20 +131,21 @@ describe('admin soft toggles and no-delete (spec req 12 / req 11 scenario 3 / BR
 
   it('rejects any admin delete attempt with all records intact (req 11, scenario 3)', async () => {
     const paths = [
-      '/api/events/ev-001',
-      '/api/events/ev-001/guests',
-      '/api/guests/g-001',
-      '/api/photos/ph-001',
-    ];
+      ['/api/events/ev-001', 403], // the purge route exists but refuses admins by role
+      ['/api/events/ev-001/guests', 404],
+      ['/api/guests/g-001', 404],
+      ['/api/photos/ph-001', 404],
+    ] as const;
 
-    for (const path of paths) {
+    for (const [path, status] of paths) {
       const res = await request('DELETE', path, ADMIN_EV1);
-      expect(res.status).toBe(404); // no admin-reachable DELETE route exists
+      expect(res.status).toBe(status);
     }
 
     expect(await getPrisma().event.count()).toBe(3);
     expect(await getPrisma().guest.count()).toBe(14);
     expect(await getPrisma().photo.count()).toBe(14);
-    expect(registeredDeleteRoutes()).toEqual([]); // BR-13: none registered, for anyone
+    // BR-13: only the provider purge is registered, never a row delete.
+    expect(registeredDeleteRoutes()).toEqual(['/events/:id']);
   });
 });

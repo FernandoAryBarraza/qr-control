@@ -13,6 +13,7 @@ import {
   existingAdminIds,
   findEvent,
   listEvents,
+  purgeEvent,
   updateEventPolicy,
 } from '../data/repositories/events';
 import { createGuest, guestEventId, listGuests, updateGuest } from '../data/repositories/guests';
@@ -25,6 +26,7 @@ import {
   canCheckIn,
   canCreateEvent,
   canDecideAdminRequest,
+  canPurgeEvent,
   canReadEvent,
   canReadQrImage,
   canUpdateEventPolicy,
@@ -231,6 +233,29 @@ apiRouter.patch('/events/:id', callerContext, async (req, res) => {
     return;
   }
   res.json(updated);
+});
+
+// DELETE /api/events/:id — provider purge (BR-12 / spec req 11). The role gate
+// runs BEFORE the state lookup, so admin/security get the same 403 whether the
+// event exists or not; the finished check lives in the delete predicate itself
+// (see purgeEvent). cascade removes only event-scoped rows, never User rows;
+// there is no body because nothing survives to return.
+apiRouter.delete('/events/:id', callerContext, async (req, res) => {
+  const caller = callerOf(res);
+  if (!canPurgeEvent(caller)) {
+    forbidden(res);
+    return;
+  }
+  const outcome = await purgeEvent(pathId(req));
+  if (outcome === 'not_found') {
+    res.status(404).json({ statusCode: 404, message: 'Not Found' });
+    return;
+  }
+  if (outcome === 'not_finished') {
+    badRequest(res);
+    return;
+  }
+  res.status(204).end();
 });
 
 // GET /api/events/:id/guests — provider any; assigned admin (design §5).
