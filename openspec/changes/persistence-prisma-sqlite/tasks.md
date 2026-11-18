@@ -755,7 +755,7 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       **1 failed | 7 passed**, proving the assertion now observes orphans. The verifier's
       three non-blocking notes were also closed: a `finished` + past-`end` purge case, the
       role-before-read 403 on unknown ids, and this checkbox. Recheck: 14/14, int 209/209.
-      **Committed in `6f652ad`** together with 4.4 (7 files, +368/−21).
+      **Committed in `dfa8d13`** together with 4.4 (7 files, +368/−21).
 - [x] **4.4** Implement `DELETE /api/events/:id` (provider + `status=finished` gate;
       Prisma `onDelete: Cascade` does the purge). 🚧 after 4.3.
       — **Done 2026-11-18**: `canPurgeEvent` (provider-only ROLE half, checked before any
@@ -766,7 +766,7 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       The BR-13 pin was re-scoped from `registeredDeleteRoutes() === []` to
       `['/events/:id']` — only the provider purge exists, never a row delete.
       Checks: unit **159/159**, int **209/209**, `tsc --noEmit` exit 0, `prettier --check .` clean.
-      **Committed in `6f652ad`** together with 4.3. RDD assess on that commit: `medium`,
+      **Committed in `dfa8d13`** together with 4.3. RDD assess on that commit: `medium`,
       `review_due: false` (`under_budget`) with `--base-ref 5021479 --committed-only`.
 - [ ] **4.5** **Test-first (RED):** write the assertion inside `seed.int.spec.ts` (or a new
       `db-verify.int.spec.ts`) that the `seed:origin` marker equals the provider configured in

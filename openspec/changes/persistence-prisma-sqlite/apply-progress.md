@@ -1753,7 +1753,7 @@ intent — admins can never delete through any path — is preserved, not weaken
 - **Files:** `src/server/api/purge.int.spec.ts` (new), `src/server/api/toggles.int.spec.ts`,
   `src/server/api/authz.ts`, `src/server/api/index.ts`,
   `src/server/data/repositories/events.ts`.
-- **Commit:** `6f652ad` (7 files, +368/−21 = 389 authored lines; delivery strategy
+- **Commit:** `dfa8d13` (7 files, +368/−21 = 389 authored lines; delivery strategy
   `stacked-to-main` chosen for PR-4). Nothing pushed; publish remains a user decision.
 - **RDD assess:** `gentle-ai review assess --base-ref 5021479 --committed-only --json` →
   `risk: medium`, `review_due: false`, reason `under_budget`. No native review started; the
