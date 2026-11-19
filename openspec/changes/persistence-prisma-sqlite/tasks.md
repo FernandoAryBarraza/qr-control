@@ -781,6 +781,8 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       re-implemented); `scripts/package.json` is the ESM marker tsx needs for top-level
       await, mirroring the existing `prisma/package.json`. Checks: unit **159/159**,
       int **217/217**, `tsc --noEmit` exit 0, `prettier --check .` clean, `ng build` exit 0.
+      **Committed in `d87cb58`** together with 4.6. RDD assess on that commit: `medium`,
+      `review_due: false` (`under_budget`) with `--base-ref 5021479 --committed-only`.
 - [x] **4.6** Write the Postgres dry-run doc (D1): provider literal edit → `DATABASE_URL`
       swap → regenerate initial migration → `db:reset && db:seed` → `npm run db:verify`
       (design §9 steps). _Traces: BR-18 → spec req 16 (scenario 2: no enums — add a grep
@@ -794,6 +796,7 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       declaration (`/^[ \t]*enum[ \t]+\w+/m`) with a companion case proving a comment that
       merely mentions enums does not trip it. Same gate as 4.5: unit **159/159**,
       int **217/217**, `tsc --noEmit` exit 0, `prettier --check .` clean, `ng build` exit 0.
+      **Committed in `d87cb58`** together with 4.5.
 - [ ] **4.7** Decouple remaining `seed-data.ts` runtime coupling: remove the store's seed
       initialization remnants now that `PaseStore.load()` owns state; keep
       `src/app/core/seed-data.ts` and `src/app/core/metrics.spec.ts` intact (proposal rollback

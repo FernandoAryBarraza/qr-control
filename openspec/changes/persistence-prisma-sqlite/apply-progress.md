@@ -2236,3 +2236,10 @@ touched, and the gate ran against the already-committed `3cc974c`.
 - **Working-tree guard:** only additive/allowed surfaces touched —
   `prisma/`, `scripts/`, `src/server/data/`, `openspec/`, plus one added line in
   `package.json`. Nothing unrelated staged.
+- **Commit:** `d87cb58` (9 files, +398/−6 = 404 authored lines; delivery strategy
+  `stacked-to-main` already cached for PR-4). Nothing pushed; publish remains a user
+  decision.
+- **RDD assess:** `gentle-ai review assess --base-ref 5021479 --committed-only --json` →
+  `risk: medium` (reason `executable_change`), `review_due: false`, reason
+  `under_budget` (14 changed paths, 803 lines). No native review started; the reviewed
+  boundary stays pending at `5021479` in this slice.
