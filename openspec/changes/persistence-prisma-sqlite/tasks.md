@@ -768,16 +768,32 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       Checks: unit **159/159**, int **209/209**, `tsc --noEmit` exit 0, `prettier --check .` clean.
       **Committed in `dfa8d13`** together with 4.3. RDD assess on that commit: `medium`,
       `review_due: false` (`under_budget`) with `--base-ref 5021479 --committed-only`.
-- [ ] **4.5** **Test-first (RED):** write the assertion inside `seed.int.spec.ts` (or a new
+- [x] **4.5** **Test-first (RED):** write the assertion inside `seed.int.spec.ts` (or a new
       `db-verify.int.spec.ts`) that the `seed:origin` marker equals the provider configured in
       `schema.prisma`; then implement `scripts/verify-db-provider.ts` + append the
       `db:verify` npm script (`tsx scripts/verify-db-provider.ts`) so
       `npm run db:verify` fails loudly on mismatch. _Traces: BR-18 → spec req 16 (scenario 1)._
-- [ ] **4.6** Write the Postgres dry-run doc (D1): provider literal edit → `DATABASE_URL`
+      New `src/server/data/db-verify.int.spec.ts` (6 cases: seeded pass, missing marker,
+      foreign-provider marker, schema/`DATA_PROVIDER` drift, plus the real CLI contract via
+      `execFileSync('npm', ['run', 'db:verify'])` asserting exit 0 and exit 1+stderr).
+      RED observed first (`Cannot find module '../../../scripts/verify-db-provider'`), then
+      GREEN 6/6. `readSchemaProvider()` gained an optional `schemaPath` (reused, not
+      re-implemented); `scripts/package.json` is the ESM marker tsx needs for top-level
+      await, mirroring the existing `prisma/package.json`. Checks: unit **159/159**,
+      int **217/217**, `tsc --noEmit` exit 0, `prettier --check .` clean, `ng build` exit 0.
+- [x] **4.6** Write the Postgres dry-run doc (D1): provider literal edit → `DATABASE_URL`
       swap → regenerate initial migration → `db:reset && db:seed` → `npm run db:verify`
       (design §9 steps). _Traces: BR-18 → spec req 16 (scenario 2: no enums — add a grep
       assertion `schema.prisma` contains no `enum` keyword to `db:verify`)._
       Postgres **execution** is explicitly out of scope — mark it 🚧 out-of-change.
+      Doc: `prisma/POSTGRES-SWITCH.md` (🚧 out-of-change banner;5 steps incl. the Prisma 7
+      driver-adapter swap `@prisma/adapter-better-sqlite3` → `@prisma/adapter-pg`, archived
+      migration regeneration, `db:verify` contract, rollback), linked from design §9.
+      The no-`enum` grep assertion landed in `db:verify` test-first: RED observed
+      (`promise resolved "'sqlite'" instead of rejecting`), GREEN 8/8 — matched as a real
+      declaration (`/^[ \t]*enum[ \t]+\w+/m`) with a companion case proving a comment that
+      merely mentions enums does not trip it. Same gate as 4.5: unit **159/159**,
+      int **217/217**, `tsc --noEmit` exit 0, `prettier --check .` clean, `ng build` exit 0.
 - [ ] **4.7** Decouple remaining `seed-data.ts` runtime coupling: remove the store's seed
       initialization remnants now that `PaseStore.load()` owns state; keep
       `src/app/core/seed-data.ts` and `src/app/core/metrics.spec.ts` intact (proposal rollback

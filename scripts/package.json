@@ -1,0 +1,4 @@
+{
+  "//": "ESM marker for tsx: verify-db-provider.ts uses import.meta + top-level await, and the repo root has no \"type\": \"module\" (same marker as prisma/package.json).",
+  "type": "module"
+}

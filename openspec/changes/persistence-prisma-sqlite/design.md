@@ -411,6 +411,9 @@ fails in `ng test`, server/BR behavior fails in `test:int`; a task is done only 
 
 **Postgres switch mechanics** (executed later, verified now):
 
+> Dry-run runbook with exact commands, the `db:verify` contract and the rollback path:
+> `prisma/POSTGRES-SWITCH.md` (🚧 out-of-change — no step has been executed).
+
 1. `schema.prisma`: `provider = "sqlite"` → `"postgresql"` (one literal).
 2. `.env`: `DATABASE_URL` `file:./dev.db` → `postgresql://user:pass@host:5432/qr_control`.
 3. D1 migration story: archive/delete `prisma/migrations`, run `prisma migrate dev --name init`
