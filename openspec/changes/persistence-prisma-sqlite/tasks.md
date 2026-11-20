@@ -7,6 +7,8 @@ split (design §11). Strict TDD is ACTIVE: every behavior task carries an explic
 
 > **Chain context (chained-pr skill):** stacked PRs to main; every slice below is additive and
 > independently landable. Each PR section marks its position with 📍.
+> **Delivery strategy (chosen 2026-11-18):** `stacked-to-main` — the next slice stacks on this
+> branch's tip and the final PR of PR-4 targets `main`; push and PR creation stay user decisions.
 >
 > ```
 > PR-1a → PR-1b → PR-1c → PR-1d → PR-2a → PR-2b → PR-3a → PR-3b → PR-4
@@ -730,15 +732,42 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       400 table, and the whitelist/`done`-alias pin) → `retention.int.spec.ts` is now **22
       tests**. Its remaining note is a product question, not a defect: `retentionDays` is
       readable only from the PATCH response (no GET returns it yet).
-- [ ] **4.3** **Test-first (RED):** write `src/server/api/purge.int.spec.ts` — provider
+- [x] **4.3** **Test-first (RED):** write `src/server/api/purge.int.spec.ts` — provider
       deletes an `finished` event and **all** scoped rows disappear (guests, companions,
       photos, check-ins, QRs, admin requests, assignments; `User` rows survive); provider
       cannot delete a non-finished event even when `end` passed; admin delete always rejected
       with records intact. If the cascade assertion fails, add the SQLite FK pragma to the
       initial migration (design §12 risk row). _Traces: BR-12 → spec req 11 (scenarios 1–2);
       BR-13 → spec req 11 (scenario 3)._
-- [ ] **4.4** Implement `DELETE /api/events/:id` (provider + `status=finished` gate;
+      — **RED observed 2026-11-18**: `purge.int.spec.ts` (6 tests) + the re-scoped BR-13
+      structural pin in `toggles.int.spec.ts` → `7 failed | 5 passed`; every failure was the
+      absent `DELETE /api/events/:id` contract (404 where 204/403/400/401 are owed). GREEN
+      after 4.4: **14/14** (8 purge + 6 toggles); full suite unit **159/159**, int **209/209**.
+      No SQLite FK pragma needed — the cascade assertion passed against the unmodified
+      initial migration.
+      The finished event's rows are built through the public API (guest + companion, photo,
+      QR, check-in, admin request); the check-in needs a future `end` set directly in setup
+      because the seed date is in the past — BR-12 still gates on `status`, never dates.
+      **Independent verifier (Risk: item 1 — irreversible deletion): one blocker found and
+      fixed.** The companion count was vacuous after the guests disappeared; it now counts
+      the companion row ids captured BEFORE the delete. Scratch mutation probe (companion FK
+      removed from a copied migration, never in the workspace) flipped that test to
+      **1 failed | 7 passed**, proving the assertion now observes orphans. The verifier's
+      three non-blocking notes were also closed: a `finished` + past-`end` purge case, the
+      role-before-read 403 on unknown ids, and this checkbox. Recheck: 14/14, int 209/209.
+      **Committed in `dfa8d13`** together with 4.4 (7 files, +368/−21).
+- [x] **4.4** Implement `DELETE /api/events/:id` (provider + `status=finished` gate;
       Prisma `onDelete: Cascade` does the purge). 🚧 after 4.3.
+      — **Done 2026-11-18**: `canPurgeEvent` (provider-only ROLE half, checked before any
+      row is read) → `purgeEvent` (`deleteMany({ id, status: 'finished' })` inside a
+      transaction, so the gate cannot race a policy patch; `0` rows distinguishes 404 from
+      the unfinished-event 400) → `204` with no body. Cascade wipes all eight event-scoped
+      row families and leaves every `User` row intact; `start`/`end` never enter the gate.
+      The BR-13 pin was re-scoped from `registeredDeleteRoutes() === []` to
+      `['/events/:id']` — only the provider purge exists, never a row delete.
+      Checks: unit **159/159**, int **209/209**, `tsc --noEmit` exit 0, `prettier --check .` clean.
+      **Committed in `dfa8d13`** together with 4.3. RDD assess on that commit: `medium`,
+      `review_due: false` (`under_budget`) with `--base-ref 5021479 --committed-only`.
 - [ ] **4.5** **Test-first (RED):** write the assertion inside `seed.int.spec.ts` (or a new
       `db-verify.int.spec.ts`) that the `seed:origin` marker equals the provider configured in
       `schema.prisma`; then implement `scripts/verify-db-provider.ts` + append the

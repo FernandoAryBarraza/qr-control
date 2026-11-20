@@ -67,6 +67,16 @@ export function canUpdateEventPolicy(caller: CallerContext): boolean {
 }
 
 /**
+ * BR-12 / spec req 11: hard delete belongs to the provider alone. Like the
+ * policy write this is a ROLE-only half — the event's `finished` status is the
+ * other half and is checked atomically at the repository, never from the URL.
+ * Admin and security are refused before any row is read.
+ */
+export function canPurgeEvent(caller: CallerContext): boolean {
+  return caller.role === 'provider';
+}
+
+/**
  * Design §5: the door read shared by the scan and the QR verification. The token
  * resolves its event, and the caller must be assigned to that event as either its
  * admin or its security staff. Two INDEPENDENT halves: the ROLE half admits only

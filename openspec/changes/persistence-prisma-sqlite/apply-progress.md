@@ -1730,15 +1730,34 @@ overage was measured, reported and approved instead; no split was taken.
   `prisma/seed.ts`, `src/app/**`, every prior-batch file, all client feature/UI code.
   **No DELETE route added** — `grep '\.delete(' src/server/api/index.ts` → 0 matches
 
-## Pre-existing pin warning (owner: PR-4 — do NOT touch it in this batch)
+## Pre-existing pin warning (RESOLVED in PR-4 task 4.4)
 
 The structural `registeredDeleteRoutes() === []` pin in `toggles.int.spec.ts` (2a-ii-b)
-stays GREEN here precisely because PR-3a adds **no** DELETE route (grep-verified above).
-**It must be updated when the provider-only `DELETE /api/events/:id` (BR-12) lands in
-PR-4**: once that route exists, `registeredDeleteRoutes()` is no longer `[]` and the pin
-will fail by design — its intent (admins can never delete through any path) must then be
-re-scoped to assert the admin DELETE attempt is rejected while the provider purge route
-exists. This batch deliberately did not weaken or preempt it.
+stayed GREEN through PR-3a because that batch added **no** DELETE route (grep-verified
+above). PR-4 task 4.4 re-scoped it to `['/events/:id']`: the only registered DELETE route
+is now the provider-only event purge (BR-12), and the admin DELETE attempt is asserted as
+a role refusal (403) while guest/photo DELETE paths stay unregistered (404). The BR-13
+intent — admins can never delete through any path — is preserved, not weakened.
+
+## PR-4 task 4.3/4.4 — provider purge with cascade (2026-11-18)
+
+- **RED:** 7 failed | 5 passed across `purge.int.spec.ts` and `toggles.int.spec.ts`.
+- **GREEN:** 14/14 focused; full suite unit 159/159, int 209/209; `tsc --noEmit` exit 0;
+  `prettier --check .` clean.
+- **Independent verifier blocker fixed:** companion rows are counted by ids captured before
+  the delete (the old `guestId: { in: guestIds }` count was vacuous post-purge). A scratch
+  mutation removing the companion FK flipped the case to `1 failed | 7 passed`, proving the
+  pin is real. Also added: finished + past-end purge, 403-before-lookup on unknown ids.
+- **No migration change:** the cascade assertion passed against the unmodified initial
+  migration, so the design §12 FK-pragma fallback was not needed.
+- **Files:** `src/server/api/purge.int.spec.ts` (new), `src/server/api/toggles.int.spec.ts`,
+  `src/server/api/authz.ts`, `src/server/api/index.ts`,
+  `src/server/data/repositories/events.ts`.
+- **Commit:** `dfa8d13` (7 files, +368/−21 = 389 authored lines; delivery strategy
+  `stacked-to-main` chosen for PR-4). Nothing pushed; publish remains a user decision.
+- **RDD assess:** `gentle-ai review assess --base-ref 5021479 --committed-only --json` →
+  `risk: medium`, `review_due: false`, reason `under_budget`. No native review started; the
+  reviewed boundary stays pending in this slice until a later commit reaches the budget.
 
 ## Open item — re-seed FK footgun (owner note says PR-3a; NOT covered by tasks 3a.1–3a.3)
 
