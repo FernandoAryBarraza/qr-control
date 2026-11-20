@@ -2195,3 +2195,51 @@ Recorded as blocked items 1 and 7 in `tasks.md`.
 
 **Risk:** none — documentation and verification only. No code, schema, dependency or route
 touched, and the gate ran against the already-committed `3cc974c`.
+
+## PR-4 tasks 4.5/4.6 — `db:verify` guardrail + Postgres dry-run doc (2026-11-19)
+
+- **4.5 TDD:** RED first — `Cannot find module '../../../scripts/verify-db-provider'`
+  (the same import-failure RED shape used in 1b.2), then GREEN 6/6 in the new
+  `src/server/data/db-verify.int.spec.ts`. The spec pins the observable the npm script
+  promises by running the real CLI (`execFileSync('npm', ['run', 'db:verify'])`,
+  inherited temp `DATABASE_URL`): exit 0 + `db:verify OK` when seeded, exit 1 with
+  `seed:origin` and the foreign provider on stderr after a marker drift. In-process cases
+  cover the missing marker and the schema/`DATA_PROVIDER` drift.
+- **4.5 implementation:** `scripts/verify-db-provider.ts` (`verifyDbProvider()` exported
+  for tests + a `pathToFileURL` CLI guard, same pattern as `prisma/seed.ts`),
+  `"db:verify": "tsx scripts/verify-db-provider.ts"` appended to `package.json`, and
+  `readSchemaProvider()` extended with an optional `schemaPath` — reused, not
+  re-implemented.
+- **Gotcha found while GREENing:** `tsx` compiles `.ts` as CJS when the nearest
+  `package.json` has no `"type": "module"`, so top-level `await` fails
+  (`Top-level await is currently not supported with the "cjs" output format`). The repo
+  already solves this with the `prisma/package.json` ESM marker; `scripts/package.json`
+  is the same marker, with a comment naming both. Probe evidence: the same
+  `await null;` file fails in `scripts/` and passes in `prisma/` before the marker was
+  added.
+- **4.6 TDD:** RED observed exactly on the requested rule —
+  `promise resolved "'sqlite'" instead of rejecting` for a schema containing
+  `enum Role { ADMIN }`; GREEN 8/8. The guard matches a real declaration
+  (`/^[ \t]*enum[ \t]+\w+/m`), and a companion case proves a comment that merely
+  mentions enums does not trip it (so it is a grep assertion, not an `includes`).
+- **4.6 doc:** `prisma/POSTGRES-SWITCH.md` —5 steps (provider literal → `DATABASE_URL`
+  - `DATA_PROVIDER` + Prisma 7 driver-adapter swap → archived migration regeneration →
+    `db:reset && db:seed` → `npm run db:verify`), the three `db:verify` checks, and a
+    rollback path. Banner marks it 🚧 **out-of-change**: no step has been executed against a
+    real Postgres server; design §9 links to it.
+- **Verified live:** `npm run db:verify` against the working `dev.db` prints
+  `db:verify OK: seed:origin "sqlite" matches the schema provider and DATA_PROVIDER "sqlite".`
+  and exits 0.
+- **Gate:** unit **159/159**, int **217/217** (209 baseline + 8 new),
+  `npx prettier --check .` clean, `npx tsc --noEmit -p tsconfig.app.json` exit 0,
+  `ng build` exit 0 (prerendered 1 static route).
+- **Working-tree guard:** only additive/allowed surfaces touched —
+  `prisma/`, `scripts/`, `src/server/data/`, `openspec/`, plus one added line in
+  `package.json`. Nothing unrelated staged.
+- **Commit:** `d87cb58` (9 files, +398/−6 = 404 authored lines; delivery strategy
+  `stacked-to-main` already cached for PR-4). Nothing pushed; publish remains a user
+  decision.
+- **RDD assess:** `gentle-ai review assess --base-ref 5021479 --committed-only --json` →
+  `risk: medium` (reason `executable_change`), `review_due: false`, reason
+  `under_budget` (14 changed paths, 803 lines). No native review started; the reviewed
+  boundary stays pending at `5021479` in this slice.

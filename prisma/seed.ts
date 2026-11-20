@@ -49,12 +49,14 @@ function parseDateLabel(label: string): Date {
   return new Date(Date.UTC(Number(year), monthIndex, Number(day), Number(hours), Number(minutes)));
 }
 
-/** Reads `provider` from the datasource block of prisma/schema.prisma (BR-18). */
-export async function readSchemaProvider(): Promise<string> {
-  const schema = await readFile(join(import.meta.dirname, 'schema.prisma'), 'utf8');
+/** Reads `provider` from the datasource block of a schema file (BR-18). */
+export async function readSchemaProvider(
+  schemaPath = join(import.meta.dirname, 'schema.prisma'),
+): Promise<string> {
+  const schema = await readFile(schemaPath, 'utf8');
   const match = /datasource\s+db\s*{\s*provider\s*=\s*"([^"]+)"/.exec(schema);
   if (match === null) {
-    throw new Error('No datasource provider found in prisma/schema.prisma');
+    throw new Error(`No datasource provider found in ${schemaPath}`);
   }
   return match[1];
 }
