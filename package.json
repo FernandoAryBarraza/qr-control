@@ -15,6 +15,7 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "db:verify": "tsx scripts/verify-db-provider.ts",
+    "bundle:guard": "node scripts/verify-browser-bundle.mjs",
     "api:start": "tsx src/server/api/main.ts",
     "serve:ssr:qr_control": "node dist/qr_control/server/server.mjs"
   },
