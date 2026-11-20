@@ -23,7 +23,8 @@ import type {
   PhotoState,
   Role,
 } from './models';
-import { EVENTS, GUESTS, PHOTOS, USERS } from './seed-data';
+// v1 display fixture (same category as GATES/PUBLIC_WEB_URL), not seed state.
+import { USERS } from './seed-data';
 import { ToastService } from './toast.service';
 
 /** Immutable set toggle — expanded rows/records are held as a whole set. */
@@ -41,12 +42,13 @@ function toggleIn(set: ReadonlySet<string>, id: string): ReadonlySet<string> {
  * `photos` and `events` be shared with the derived `computed()`s without
  * surprises.
  *
- * Hydration-safe read path (design §4 / spec req 15): the store starts from
- * the bundled seed snapshot in a `loading` state — identical on server and
- * client, so the prerendered HTML hydrates without mismatch — and `load()`
- * (browser-only, `afterNextRender`) overwrites the data signals with the
- * persisted snapshot fetched over HTTP. Mutations apply optimistically to the
- * signals and persist through `DataApiService`, reverting on API failure (PR-2b).
+ * Hydration-safe read path (design §4 / spec req 15): the store starts empty
+ * in a `loading` state — identical on server and client, so the prerendered
+ * HTML hydrates without mismatch — and `load()` (browser-only,
+ * `afterNextRender`) fills the data signals with the persisted snapshot fetched
+ * over HTTP. Mutations apply optimistically to the signals and persist through
+ * `DataApiService`, reverting on API failure (PR-2b). PR-4 removed the bundled
+ * seed snapshot: a failed `load()` leaves the store empty, not seeded.
  */
 @Injectable({ providedIn: 'root' })
 export class PaseStore {
@@ -54,10 +56,10 @@ export class PaseStore {
   private readonly api = inject(DataApiService);
 
   /* ---------- Datos ---------- */
-  readonly guests = signal<readonly Guest[]>(GUESTS);
-  readonly photos = signal<readonly EventPhoto[]>(PHOTOS);
-  readonly events = signal<readonly PaseEvent[]>(EVENTS);
-  readonly passPool = signal<readonly Pass[]>(passPoolOf(GUESTS));
+  readonly guests = signal<readonly Guest[]>([]);
+  readonly photos = signal<readonly EventPhoto[]>([]);
+  readonly events = signal<readonly PaseEvent[]>([]);
+  readonly passPool = signal<readonly Pass[]>([]);
 
   /** True while the initial post-hydration fetch has not settled yet (design §4). */
   readonly loading = signal(true);
@@ -146,12 +148,12 @@ export class PaseStore {
    * Fetches the persisted snapshot (`GET /api/events` + per-event guests and
    * photos) and writes it into the signals. Called from `afterNextRender` in
    * the root component, so the Node render and the first client render only
-   * ever see the bundled state above — no hydration divergence is possible.
+   * ever see the empty state above — no hydration divergence is possible.
    *
-   * On failure the seed snapshot stays in place (graceful degradation) and a
-   * toast surfaces the error; either way the loading state ends, so UI guards
-   * can never spin forever. `passPool` is rebuilt from the persisted guest IDs
-   * so feed/QR codes cannot point at records the server does not know.
+   * On failure the store stays empty (no seed fallback after PR-4) and a toast
+   * surfaces the error; either way the loading state ends, so UI guards can
+   * never spin forever. `passPool` is built from the persisted guest IDs so
+   * feed/QR codes cannot point at records the server does not know.
    */
   async load(): Promise<void> {
     try {

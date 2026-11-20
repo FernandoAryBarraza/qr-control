@@ -24,7 +24,7 @@ export class App {
 
   constructor() {
     // Hydration-safe read path (spec req 15 / design §4): the prerendered HTML
-    // renders the store's bundled snapshot, and the API fetch runs only after
+    // renders the store's empty state, and the API fetch runs only after
     // the first client render has hydrated — identical initial state on both
     // sides, so no NG0500/NG0502 can arise from data loading. Browser-only
     // guard mirrors the FeedService pattern: the Node render never fetches.

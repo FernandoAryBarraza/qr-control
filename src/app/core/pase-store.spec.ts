@@ -2,10 +2,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { passPoolOf } from './metrics';
 import type { EventPhoto, Guest, PaseEvent } from './models';
 import { PaseStore } from './pase-store';
-import { EVENTS, GUESTS, PHOTOS } from './seed-data';
 import { ToastService } from './toast.service';
 
 /** API payload shaped exactly like the 1c repositories serialize it. */
@@ -83,17 +81,18 @@ describe('PaseStore.load() — hydration-safe client read path', () => {
 
   afterEach(() => http.verify());
 
-  it('starts from the bundled snapshot in a loading state without issuing any request', () => {
+  it('starts empty in a loading state without seed data or any request', () => {
     const store = TestBed.inject(PaseStore);
 
-    // Server and client construct the exact same bundled constants — this
-    // identity is what makes the prerendered HTML hydrate without NG05xx
-    // (design §4): nothing here can differ between the two environments.
+    // Server and client construct the exact same empty state — this identity
+    // is what makes the prerendered HTML hydrate without NG05xx (design §4).
+    // PR-4 removed the bundled seed snapshot, so no seed literal can leak into
+    // the store through construction.
     expect(store.loading()).toBe(true);
-    expect(store.guests()).toBe(GUESTS);
-    expect(store.photos()).toBe(PHOTOS);
-    expect(store.events()).toBe(EVENTS);
-    expect(store.passPool()).toEqual(passPoolOf(GUESTS));
+    expect(store.guests()).toEqual([]);
+    expect(store.photos()).toEqual([]);
+    expect(store.events()).toEqual([]);
+    expect(store.passPool()).toEqual([]);
     http.expectNone(() => true);
   });
 
@@ -156,7 +155,7 @@ describe('PaseStore.load() — hydration-safe client read path', () => {
     expect(store.events()[0]).not.toHaveProperty('br');
   });
 
-  it('falls back to the seed snapshot and ends loading when the API rejects', async () => {
+  it('stays empty and ends loading when the API rejects', async () => {
     const store = TestBed.inject(PaseStore);
     const toast = TestBed.inject(ToastService);
     const pending = store.load();
@@ -167,8 +166,9 @@ describe('PaseStore.load() — hydration-safe client read path', () => {
     await expect(pending).resolves.toBeUndefined();
 
     expect(store.loading()).toBe(false);
-    expect(store.guests()).toBe(GUESTS);
-    expect(store.events()).toBe(EVENTS);
+    expect(store.guests()).toEqual([]);
+    expect(store.events()).toEqual([]);
+    expect(store.passPool()).toEqual([]);
     expect(toast.toasts()).toHaveLength(1);
     expect(toast.toasts()[0]?.kind).toBe('warn');
   });
