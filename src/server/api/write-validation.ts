@@ -4,7 +4,7 @@ import type {
   AdminRequestWriteInput,
 } from '../data/repositories/admin-requests';
 import type { CheckInWriteInput } from '../data/repositories/check-ins';
-import type { EventWriteInput } from '../data/repositories/events';
+import type { EventPatchInput, EventWriteInput } from '../data/repositories/events';
 import type { GuestPatchInput, GuestWriteInput } from '../data/repositories/guests';
 import type { MemberWriteInput } from '../data/repositories/members';
 import type { PhotoPatchInput, PhotoWriteInput } from '../data/repositories/photos';
@@ -89,6 +89,34 @@ function parseAdmins(value: unknown): readonly string[] | null {
   return ids;
 }
 
+/**
+ * Shared by the CREATE parser and the PATCH policy parser: the `done` ->
+ * `finished` alias maps first, then the persisted vocabulary is checked.
+ * `null` means the value is not an acceptable event status.
+ */
+function parseEventStatus(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const status = value === 'done' ? 'finished' : value;
+  return EVENT_STATUSES.includes(status) ? status : null;
+}
+
+/**
+ * Shared by the CREATE parser and the PATCH policy parser (W2): an int4-safe
+ * retention bound. SQLite would happily store the overflow, Postgres would 500.
+ * `null` means the value is not an acceptable retention window.
+ */
+function parseRetentionDays(value: unknown): number | null {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_RETENTION_DAYS
+  ) {
+    return null;
+  }
+  return value;
+}
+
 export function parseEventInput(body: unknown): ParseResult<EventWriteInput> {
   if (!isRecord(body)) return FAIL;
 
@@ -103,26 +131,44 @@ export function parseEventInput(body: unknown): ParseResult<EventWriteInput> {
   // S2: the client vocabulary uses `done`; the DB stores `finished` (1b decision).
   // The alias maps FIRST, then the persisted vocabulary is validated, so both
   // spellings of the finished state are accepted and anything else still fails.
-  const rawStatus = body['status'] ?? DEFAULT_EVENT_STATUS;
-  if (typeof rawStatus !== 'string') return FAIL;
-  const status = rawStatus === 'done' ? 'finished' : rawStatus;
-  if (!EVENT_STATUSES.includes(status)) return FAIL;
-
-  const retentionDays = body['retentionDays'] ?? DEFAULT_RETENTION_DAYS;
-  if (
-    typeof retentionDays !== 'number' ||
-    !Number.isInteger(retentionDays) ||
-    retentionDays < 1 ||
-    retentionDays > MAX_RETENTION_DAYS
-  ) {
-    return FAIL;
-  }
+  const status = parseEventStatus(body['status'] ?? DEFAULT_EVENT_STATUS);
+  const retentionDays = parseRetentionDays(body['retentionDays'] ?? DEFAULT_RETENTION_DAYS);
+  if (status === null || retentionDays === null) return FAIL;
 
   const rawNote = body['note'];
   if (rawNote !== undefined && rawNote !== null && typeof rawNote !== 'string') return FAIL;
   const note = typeof rawNote === 'string' && rawNote.trim() !== '' ? rawNote : null;
 
   return { ok: true, value: { name, start, end, retentionDays, note, status, admins } };
+}
+
+/**
+ * PATCH /api/events/:id (design §5, BR-14/BR-15): a POLICY patch — only
+ * `retentionDays` and `status` are mutable, and at least one must be present.
+ * `start`/`end` are deliberately absent: they define QR validity (BR-09) and are
+ * never rewritten by this route. Values reuse the CREATE rules byte for byte
+ * (the `done` alias and the int4 retention bound), so a value accepted on create
+ * is accepted here and vice versa.
+ */
+export function parseEventPatch(body: unknown): ParseResult<EventPatchInput> {
+  if (!isRecord(body)) return FAIL;
+
+  const hasRetention = body['retentionDays'] !== undefined;
+  const hasStatus = body['status'] !== undefined;
+  if (!hasRetention && !hasStatus) return FAIL;
+
+  const retentionDays = hasRetention ? parseRetentionDays(body['retentionDays']) : undefined;
+  const status = hasStatus ? parseEventStatus(body['status']) : undefined;
+  // `null` only comes from a rejected value: the absent halves are `undefined`.
+  if (retentionDays === null || status === null) return FAIL;
+
+  return {
+    ok: true,
+    value: {
+      ...(retentionDays === undefined ? {} : { retentionDays }),
+      ...(status === undefined ? {} : { status }),
+    },
+  };
 }
 
 function parseParty(

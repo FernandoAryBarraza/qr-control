@@ -667,9 +667,11 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 📍 3b �
       **PR body authored** at `openspec/changes/persistence-prisma-sqlite/pr-3b-body.md`: it
       quotes the proposal criterion verbatim and maps each of its 6 clauses (single-use,
       expiry guest/companion/emergency, companion linkage, opaque payload) to the named
-      passing test. **PR publication is BLOCKED, not done**: the repo has **no git remote**
-      (`git remote -v` empty) and no `gh` CLI, so the body cannot be attached to a PR until the
-      owner decides the remote and the chain strategy (blocked items 1 and 7).
+      passing test. **PR publication done (2026-11-16)**: the remote and `gh` CLI were added
+      by the owner (blocked items 1 and 7 resolved), PR #1 (head `feat/prototype-styling-tailwind`
+      → base `pr-3a`) was opened with this body and merged with _Rebase and merge_
+      (`pr-3a` = `f32361f`), and PR #2 (`pr-3a` → `main`) was merged with a merge commit
+      (`origin/main` = `86706df`, `pr-3a` an ancestor of `main`).
 
 **Suggested work-unit commits:**
 
@@ -695,13 +697,39 @@ verify; `seed-data.ts` file itself is never deleted (proposal rollback plan).
 
 Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → 📍 4`
 
-- [ ] **4.1** **Test-first (RED):** write `src/server/api/retention.int.spec.ts` — provider
+- [x] **4.1** **Test-first (RED):** write `src/server/api/retention.int.spec.ts` — provider
       sets per-event retention and it is persisted + returned by the API; `admin` attempting
       to change retention rejected; QR validity depends **only** on `event.end` even when
       retention is longer; data past `event.end` remains readable per role scope while
       retention is open. _Traces: BR-14/BR-15 → spec req 13 (all 3 scenarios)._
-- [ ] **4.2** Implement `PATCH /api/events/:id` (provider only: `retentionDays`, `status`)
-      per design §5. 🚧 after 4.1.
+      — **RED observed 2026-11-17**: 5 tests, `2 failed | 3 passed`. Both failures were the
+      absent contract (`404` where the spec wants `200` provider-set / `403` admin-rejected);
+      the 3 passes are the scenario-1/2 regression pins (QR on `event.end` with retention
+      3650 → `expired`, with `retentionDays: 1` → `valid`; reads per role scope after end,
+      security still 403 on guest content, foreign admin 403). Note: Express 5 has no JSON
+      404 handler in `createApiApp`, so the spec asserts `res.status` before `res.json()`.
+- [x] **4.2** Implement `PATCH /api/events/:id` (provider only: `retentionDays`, `status`)
+      per design §5. 🚧 after 4.1. — **Done 2026-11-17, GREEN 5/5**: `canUpdateEventPolicy`
+      (role-only predicate in `authz.ts`) → `parseEventPatch` (at least one of the two
+      fields; `start`/`end` are deliberately not patchable) → `updateEventPolicy`
+      (`updateMany` + read-back in a transaction, `null` → 404). The role check runs BEFORE
+      the parser so an admin gets `403` with no validation oracle; the PATCH response is the
+      read shape plus `retentionDays` (the field it owns), the GET shapes are unchanged.
+      `parseEventInput` and `parseEventPatch` share `parseEventStatus`/`parseRetentionDays`,
+      so the `done` alias and the W2 int4 bound are one rule on both paths — differential
+      evidence: `events-write.int.spec.ts` (create) stays green.
+      Checks: unit **159/159**, int **201/201**, `tsc --noEmit` exit 0, `prettier --check .` clean.
+      — **Independent verifier (Risk: item 2 → permission guard): PASS.** It confirmed the
+      guard runs before the parser (admin gets an identical 403 for valid, empty, out-of-range
+      and unknown-field bodies — no validation oracle), that `start`/`end`/`name`/`id` never
+      move (live probe: whitelist ignores them), that `updateEventPolicy` is exception-free
+      with a generic 404, and that the GET/POST response shapes are unchanged (no
+      `retentionDays` outside the PATCH response; `src/app/**` untouched). Its non-blocking
+      gap was closed in the same batch: **17 route-contract pins added** (404 unknown id, 401
+      unauthenticated, security 403, the 4-case admin ordering table, the 9-case provider
+      400 table, and the whitelist/`done`-alias pin) → `retention.int.spec.ts` is now **22
+      tests**. Its remaining note is a product question, not a defect: `retentionDays` is
+      readable only from the PATCH response (no GET returns it yet).
 - [ ] **4.3** **Test-first (RED):** write `src/server/api/purge.int.spec.ts` — provider
       deletes an `finished` event and **all** scoped rows disappear (guests, companions,
       photos, check-ins, QRs, admin requests, assignments; `User` rows survive); provider
@@ -778,10 +806,10 @@ All 16 are traced above. Flag if a requirement was expected to be authored but i
 
 | #   | Item                                                                    | When                                      | Status                                                                                                                                                                           |
 | --- | ----------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Chain strategy (stacked-to-main vs feature-branch chain + tracker)      | first PR creation                         | ⚠️ **DUE NOW** — PR-3b is gate-green and its body is authored, so publication cannot be deferred any longer; plan assumed stacked-to-main (PR-3b cut from `b64dbf2`)             |
+| 1   | Chain strategy (stacked-to-main vs feature-branch chain + tracker)      | first PR creation                         | ✅ **RESOLVED** — settled as _stacked pointer `pr-3a`, merge without squash_ and executed: PR #1 Rebase-and-merge, PR #2 merge commit (see 3b.9)                                 |
 | 2   | Dev `/api/*` passthrough failure → standalone API + proxyConfig (1a.12) | PR-1a                                     | ✅ **RESOLVED** — user approved option a (standalone API process + `/api` proxy, port 3000); smoke green direct + via `ng serve` (see 1a.12 + apply-progress §1a.12-remediation) |
 | 3   | `seed-data.ts` Angular import found (1b.1)                              | PR-1b                                     | ✅ **CHECKED (1b.1)** — zero Angular imports in the type-only chain; no escalation                                                                                               |
 | 4   | `size:exception`                                                        | 1a / 2a / 3b only if sub-split infeasible | pre-approved fallback — NOT consumed by this plan                                                                                                                                |
 | 5   | Spec requirement count 16 vs 17 stated                                  | now                                       | ⚠️ non-blocking, see traceability note                                                                                                                                           |
 | 6   | Postgres switch execution                                               | after this change                         | 🚧 out of scope (non-goal)                                                                                                                                                       |
-| 7   | No git remote (and no `gh` CLI) — PRs cannot be published               | PR-3b gate                                | ⚠️ **BLOCKING publication** — `git remote -v` is empty; PR-3b's body waits at `pr-3b-body.md` until the owner sets the remote URL/host                                           |
+| 7   | No git remote (and no `gh` CLI) — PRs cannot be published               | PR-3b gate                                | ✅ **RESOLVED** — owner added the remote + `gh`; PR #1 and #2 published and merged, `origin/main` = `86706df`, `pr-3a` = `f32361f`                                               |

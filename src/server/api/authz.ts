@@ -56,6 +56,17 @@ export function canDecideAdminRequest(caller: CallerContext): boolean {
 }
 
 /**
+ * BR-14/BR-15 / design §5: the event's POLICY (retention window and lifecycle
+ * status) belongs to the provider alone. Like the admin-request decision this is
+ * a ROLE-only rule — no assignment enters it, so the event's own admin is refused
+ * before a single row moves. The event's CONTENT writes stay with that admin
+ * (`canWriteEvent`): policy and content are two different doors.
+ */
+export function canUpdateEventPolicy(caller: CallerContext): boolean {
+  return caller.role === 'provider';
+}
+
+/**
  * Design §5: the door read shared by the scan and the QR verification. The token
  * resolves its event, and the caller must be assigned to that event as either its
  * admin or its security staff. Two INDEPENDENT halves: the ROLE half admits only
