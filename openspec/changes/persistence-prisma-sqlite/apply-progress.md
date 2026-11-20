@@ -2243,3 +2243,34 @@ touched, and the gate ran against the already-committed `3cc974c`.
   `risk: medium` (reason `executable_change`), `review_due: false`, reason
   `under_budget` (14 changed paths, 803 lines). No native review started; the reviewed
   boundary stays pending at `5021479` in this slice.
+
+## PR-4 tasks 4.7/4.8 — seed-data runtime decoupling + browser bundle guard (2026-11-20)
+
+- **4.7 TDD:** RED observed on both requested rules — construction (the seed guest array was
+  not `[]`) and failure fallback (same assertion shape at line 169) — → GREEN 17/17 in
+  `pase-store.spec.ts`. The store now starts with four empty signals;
+  `load()` is the only writer of persisted data. `USERS` remains as a v1 display fixture,
+  deliberately in the same category as the `GATES`/`PUBLIC_WEB_URL` imports the task keeps.
+- **Follow-up found by the full gate:** two unit specs had an implicit dependency on the old
+  snapshot (`feed.service.spec.ts` needed a pass in the pool, `storage-plan-modal.spec.ts`
+  needed `ev1`). Both now set their own fixtures explicitly — the test-local fix keeps the
+  decoupling real instead of restoring seed state in the store.
+- **4.8 TDD:** RED 4/4 (`MODULE_NOT_FOUND` for `scripts/verify-browser-bundle.mjs`) → GREEN
+  4/4. The spec runs the actual CLI behind `npm run bundle:guard` in a child process against
+  fixture bundles outside the worktree: clean → exit 0 + `bundle guard OK`; `@prisma` in a JS
+  file → exit 1 naming the file; `query-engine` in a nested chunk → exit 1; missing bundle →
+  exit 2 + `browser bundle not found`. Patterns: `@prisma`, `query[-_]?engine`,
+  `query_compiler`, `better-sqlite3`, `PrismaClient`, case-insensitive.
+- **PR verification notes (4.8):** after `ng build`, run `npm run bundle:guard`. Observed:
+  `bundle guard OK: 4 files scanned in dist/qr_control/browser` — zero Prisma artifacts.
+- **Gate:** unit **159/159**, int **221/221** (217 + 4 new), `npx prettier --check .` clean,
+  `npx tsc --noEmit -p tsconfig.app.json` exit 0, `npx tsc --noEmit -p tsconfig.spec.json`
+  exit 0, `ng build` exit 0 (prerendered 1 static route), `npm run bundle:guard` exit 0.
+- **Commits:** `4e1fe8b` (`refactor(client): remove seed-data runtime coupling from PaseStore`,
+  6 files) and `fbe4be4` (`chore(persistence): add browser bundle guard check`, 3 files,
+  +141). Nothing pushed.
+- **RDD assess:** first run on `4e1fe8b` was unassessable (`untracked files require an
+explicit declaration` — the 4.8 files were not yet committed); re-run on the full slice
+  with `--base-ref 5021479 --committed-only --json` → `risk: medium` (`executable_change`),
+  `review_due: false` (`under_budget`, 22 changed paths / 1029 lines). No native review
+  started; reviewed boundary still pending at `5021479`.

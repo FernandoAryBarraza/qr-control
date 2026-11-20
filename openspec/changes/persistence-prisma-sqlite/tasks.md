@@ -797,16 +797,29 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
       merely mentions enums does not trip it. Same gate as 4.5: unit **159/159**,
       int **217/217**, `tsc --noEmit` exit 0, `prettier --check .` clean, `ng build` exit 0.
       **Committed in `d87cb58`** together with 4.5.
-- [ ] **4.7** Decouple remaining `seed-data.ts` runtime coupling: remove the store's seed
+- [x] **4.7** Decouple remaining `seed-data.ts` runtime coupling: remove the store's seed
       initialization remnants now that `PaseStore.load()` owns state; keep
       `src/app/core/seed-data.ts` and `src/app/core/metrics.spec.ts` intact (proposal rollback
       plan + non-goal: catalogs `GATES`/`PUBLIC_WEB_URL` imports in `feed.service.ts`/
       `event-hero.ts` STAY — they are v1 constants, not runtime seed coupling).
       _Traces: proposal PR-4 cleanup; success criterion "seed replays with zero duplicated
       literals"._
-- [ ] **4.8** Formalize the bundle guard: scripted grep of `dist/browser` for
+      **Done:** store signals now start empty (`guests`/`photos`/`events`/`passPool`), so no
+      seed literal reaches runtime state; `USERS` stays as a v1 display fixture (same category
+      as `GATES`/`PUBLIC_WEB_URL`). TDD RED 2/2 (the seed guest array was not `[]` on
+      construction and on API rejection) → GREEN 17/17. Two specs that leaned on the implicit snapshot now
+      supply explicit fixtures (`feed.service.spec.ts` pass, `storage-plan-modal.spec.ts` ev1).
+      Gate: unit **159/159**, int **221/221**, `prettier --check .` clean, `tsc --noEmit` exit 0,
+      `ng build` exit 0. **Committed in `4e1fe8b`** (`refactor(client): …`).
+- [x] **4.8** Formalize the bundle guard: scripted grep of `dist/browser` for
       `@prisma`/query-engine artifacts (zero matches) — add it to the PR verification notes.
       _Traces: spec req 15 (scenario 3); proposal success criterion._
+      **Done:** `scripts/verify-browser-bundle.mjs` + `npm run bundle:guard` (exit 0 clean /
+      1 forbidden match / 2 missing dir), 4 integration cases running the real CLI
+      (`src/server/data/bundle-guard.int.spec.ts`). RED 4/4 (`MODULE_NOT_FOUND`) → GREEN 4/4.
+      Live run after `ng build`: `bundle guard OK: 4 files scanned in dist/qr_control/browser`.
+      Gate: unit **159/159**, int **221/221**, `prettier --check .` clean, `tsc --noEmit` exit 0,
+      `ng build` exit 0. **Committed in `fbe4be4`** (`chore(persistence): …`).
 - [ ] **4.9** **Final verification sweep (all success criteria):**
       `npm run test:all && npx prettier --check . && npx tsc --noEmit -p tsconfig.app.json && ng build`,
       reload-persistence manual check, cross-event 403 sweep across every event-scoped
@@ -820,8 +833,8 @@ Dependency position: `1a → 1b → 1c → 1d → 2a → 2b → 3a → 3b → �
 4. `feat(api): add provider hard delete with cascade` (4.4)
 5. `test(persistence): assert seed origin marker equals active provider` (4.5)
 6. `feat(persistence): add db:verify script and Postgres switch dry-run doc` (4.5–4.6)
-7. `refactor(client): remove seed-data runtime coupling from PaseStore` (4.7)
-8. `chore(persistence): add browser bundle guard check` (4.8)
+7. `refactor(client): remove seed-data runtime coupling from PaseStore` (4.7) — `4e1fe8b`
+8. `chore(persistence): add browser bundle guard check` (4.8) — `fbe4be4`
 
 ---
 
