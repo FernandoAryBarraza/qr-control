@@ -60,7 +60,10 @@ describe('FeedService', () => {
 
   it('stops the scan interval when the service is destroyed', () => {
     vi.useFakeTimers();
-    TestBed.inject(PaseStore).setRole('provider');
+    const store = TestBed.inject(PaseStore);
+    store.setRole('provider');
+    // The store now starts empty (PR-4), so the scan needs its own fixture.
+    store.passPool.set([{ code: 'P-001', name: 'Ana Torres' }]);
     const feed = TestBed.inject(FeedService);
     flushRenderEffects();
 

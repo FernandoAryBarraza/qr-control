@@ -3,6 +3,8 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { ModalService } from '../../core/modal.service';
+import { PaseStore } from '../../core/pase-store';
+import { EVENTS } from '../../core/seed-data';
 import { ModalOutlet } from './modal-outlet';
 
 /**
@@ -17,12 +19,14 @@ describe('StoragePlanModal', () => {
     TestBed.configureTestingModule({
       imports: [ModalOutlet],
       // PaseStore depends on DataApiService → HttpClient; the modal never
-      // talks to a backend (the seed snapshot answers it).
+      // talks to a backend (the store's empty state answers it).
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
   });
 
   it('opens the overlay with the event figures and the current plan preselected', async () => {
+    // The store starts empty after PR-4; the modal's own fixture supplies ev1.
+    TestBed.inject(PaseStore).events.set(EVENTS);
     TestBed.inject(ModalService).open({ kind: 'storagePlan', eventId: 'ev1' });
     const fixture = TestBed.createComponent(ModalOutlet);
     await fixture.whenStable();

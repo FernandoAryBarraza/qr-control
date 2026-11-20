@@ -44,7 +44,7 @@ describe('ContactModal', () => {
     TestBed.configureTestingModule({
       imports: [ModalOutlet],
       // PaseStore depends on DataApiService → HttpClient; the modal never
-      // talks to a backend (the seed snapshot answers it).
+      // talks to a backend (the store's empty state answers it).
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
   });
